@@ -21,6 +21,7 @@ type Tab = "all" | "my" | "shared";
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
+  const [allBoards, setAllBoards] = useState<Board[]>([]);
   const [myBoards, setMyBoards] = useState<Board[]>([]);
   const [sharedBoards, setSharedBoards] = useState<Board[]>([]);
   const [boardsLoading, setBoardsLoading] = useState(true);
@@ -33,60 +34,43 @@ export default function DashboardPage() {
     }
   }, [user, loading, router]);
 
-  // Listen to user's own boards
+  // Listen to ALL boards
   useEffect(() => {
     if (!user) return;
 
-    const q = query(
-      collection(db, "boards"),
-      where("ownerId", "==", user.uid)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(collection(db, "boards"), (snapshot) => {
       const list: Board[] = [];
       snapshot.forEach((d) => {
         list.push({ id: d.id, ...d.data() } as Board);
       });
       list.sort((a, b) => b.createdAt - a.createdAt);
-      setMyBoards(list);
+      setAllBoards(list);
+      setMyBoards(list.filter((b) => b.ownerId === user.uid));
       setBoardsLoading(false);
     }, (error) => {
-      console.error("My boards listener error:", error);
+      console.error("All boards listener error:", error);
       setBoardsLoading(false);
     });
 
     return unsubscribe;
   }, [user]);
 
-  // Listen to boards shared with user
+  // Derive shared boards from all boards
   useEffect(() => {
     if (!user) return;
-
-    const q = query(
-      collection(db, "boards"),
-      where("sharedWith", "array-contains", user.uid)
+    setSharedBoards(
+      allBoards.filter(
+        (b) => b.ownerId !== user.uid && (b.sharedWith || []).includes(user.uid)
+      )
     );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: Board[] = [];
-      snapshot.forEach((d) => {
-        list.push({ id: d.id, ...d.data() } as Board);
-      });
-      list.sort((a, b) => b.createdAt - a.createdAt);
-      setSharedBoards(list);
-    }, (error) => {
-      console.error("Shared boards listener error:", error);
-    });
-
-    return unsubscribe;
-  }, [user]);
+  }, [allBoards, user]);
 
   const displayedBoards =
     activeTab === "my"
       ? myBoards
       : activeTab === "shared"
       ? sharedBoards
-      : [...myBoards, ...sharedBoards].sort((a, b) => b.createdAt - a.createdAt);
+      : allBoards;
 
   const createBoard = async () => {
     if (!user) return;
@@ -122,7 +106,7 @@ export default function DashboardPage() {
   if (!user) return null;
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "all", label: "All Boards", count: myBoards.length + sharedBoards.length },
+    { key: "all", label: "All Boards", count: allBoards.length },
     { key: "my", label: "My Boards", count: myBoards.length },
     { key: "shared", label: "Shared with Me", count: sharedBoards.length },
   ];
