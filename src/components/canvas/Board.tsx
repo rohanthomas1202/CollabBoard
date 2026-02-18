@@ -70,13 +70,14 @@ export default function BoardCanvas({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Focus textarea when editing
+  // Focus textarea only when editing starts (not on every text change)
   useEffect(() => {
     if (editState && textareaRef.current) {
       textareaRef.current.focus();
       textareaRef.current.select();
     }
-  }, [editState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editState?.id]);
 
   // Keyboard shortcuts
   useEffect(() => {
