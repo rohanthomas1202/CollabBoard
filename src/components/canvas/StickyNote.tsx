@@ -9,7 +9,6 @@ interface StickyNoteProps {
   isSelected: boolean;
   onSelect: () => void;
   onDragEnd: (x: number, y: number) => void;
-  onDblClick: () => void;
   draggable: boolean;
 }
 
@@ -18,7 +17,6 @@ export default function StickyNote({
   isSelected,
   onSelect,
   onDragEnd,
-  onDblClick,
   draggable,
 }: StickyNoteProps) {
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
@@ -27,13 +25,12 @@ export default function StickyNote({
 
   return (
     <Group
+      name={obj.id}
       x={obj.x}
       y={obj.y}
       draggable={draggable}
       onClick={onSelect}
       onTap={onSelect}
-      onDblClick={onDblClick}
-      onDblTap={onDblClick}
       onDragEnd={handleDragEnd}
       rotation={obj.rotation}
     >
@@ -52,8 +49,8 @@ export default function StickyNote({
         height={obj.height}
         fill={obj.color}
         cornerRadius={4}
-        stroke={isSelected ? "#3b82f6" : "transparent"}
-        strokeWidth={isSelected ? 2 : 0}
+        stroke={isSelected ? "#3b82f6" : "rgba(0,0,0,0.2)"}
+        strokeWidth={2}
       />
       {/* Text content */}
       <Text

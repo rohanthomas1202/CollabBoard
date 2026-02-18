@@ -41,6 +41,9 @@ export function useBoard(boardId: string) {
       });
       setObjects(objs);
       setLoading(false);
+    }, (error) => {
+      console.error("Board objects listener error:", error);
+      setLoading(false);
     });
 
     return unsubscribe;

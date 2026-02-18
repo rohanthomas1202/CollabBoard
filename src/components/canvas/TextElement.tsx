@@ -27,6 +27,7 @@ export default function TextElement({
 
   return (
     <Group
+      name={obj.id}
       x={obj.x}
       y={obj.y}
       draggable={draggable}

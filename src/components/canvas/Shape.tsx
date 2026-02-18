@@ -1,6 +1,6 @@
 "use client";
 
-import { Rect, Circle, Line, Group } from "react-konva";
+import { Rect, Circle, Line, Group, Text } from "react-konva";
 import { BoardObject } from "@/lib/types";
 import { KonvaEventObject } from "konva/lib/Node";
 
@@ -9,6 +9,7 @@ interface ShapeProps {
   isSelected: boolean;
   onSelect: () => void;
   onDragEnd: (x: number, y: number) => void;
+  onDblClick?: () => void;
   draggable: boolean;
 }
 
@@ -17,6 +18,7 @@ export default function Shape({
   isSelected,
   onSelect,
   onDragEnd,
+  onDblClick,
   draggable,
 }: ShapeProps) {
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
@@ -26,64 +28,70 @@ export default function Shape({
   const strokeColor = isSelected ? "#3b82f6" : "#374151";
   const strokeWidth = isSelected ? 2 : 1;
 
-  if (obj.type === "rectangle") {
-    return (
-      <Rect
-        x={obj.x}
-        y={obj.y}
-        width={obj.width}
-        height={obj.height}
-        fill={obj.color}
-        stroke={strokeColor}
-        strokeWidth={strokeWidth}
-        cornerRadius={4}
-        draggable={draggable}
-        onClick={onSelect}
-        onTap={onSelect}
-        onDragEnd={handleDragEnd}
-        rotation={obj.rotation}
-      />
-    );
-  }
+  const renderShape = () => {
+    switch (obj.type) {
+      case "rectangle":
+        return (
+          <Rect
+            width={obj.width}
+            height={obj.height}
+            fill={obj.color}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+            cornerRadius={4}
+          />
+        );
+      case "circle":
+        return (
+          <Circle
+            x={obj.width / 2}
+            y={obj.height / 2}
+            radius={Math.min(obj.width, obj.height) / 2}
+            fill={obj.color}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
+          />
+        );
+      case "line":
+        return (
+          <Line
+            points={[0, 0, obj.width, obj.height]}
+            stroke={obj.color}
+            strokeWidth={isSelected ? 3 : 2}
+            hitStrokeWidth={20}
+          />
+        );
+      default:
+        return null;
+    }
+  };
 
-  if (obj.type === "circle") {
-    return (
-      <Circle
-        x={obj.x + obj.width / 2}
-        y={obj.y + obj.height / 2}
-        radius={Math.min(obj.width, obj.height) / 2}
-        fill={obj.color}
-        stroke={strokeColor}
-        strokeWidth={strokeWidth}
-        draggable={draggable}
-        onClick={onSelect}
-        onTap={onSelect}
-        onDragEnd={(e) => {
-          onDragEnd(
-            e.target.x() - obj.width / 2,
-            e.target.y() - obj.height / 2
-          );
-        }}
-      />
-    );
-  }
-
-  if (obj.type === "line") {
-    return (
-      <Line
-        x={obj.x}
-        y={obj.y}
-        points={[0, 0, obj.width, obj.height]}
-        stroke={obj.color}
-        strokeWidth={isSelected ? 3 : 2}
-        draggable={draggable}
-        onClick={onSelect}
-        onTap={onSelect}
-        onDragEnd={handleDragEnd}
-        hitStrokeWidth={20}
-      />
-    );
-  }
-
-  return null;
+  return (
+    <Group
+      name={obj.id}
+      x={obj.x}
+      y={obj.y}
+      draggable={draggable}
+      onClick={onSelect}
+      onTap={onSelect}
+      onDblClick={onDblClick}
+      onDblTap={onDblClick}
+      onDragEnd={handleDragEnd}
+      rotation={obj.rotation}
+    >
+      {renderShape()}
+      {obj.text && obj.type !== "line" && (
+        <Text
+          text={obj.text}
+          width={obj.width}
+          height={obj.height}
+          align="center"
+          verticalAlign="middle"
+          fontSize={obj.fontSize || 16}
+          fill="#1a1a1a"
+          wrap="word"
+        />
+      )}
+    </Group>
+  );
 }

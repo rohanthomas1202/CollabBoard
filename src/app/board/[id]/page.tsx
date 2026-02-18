@@ -36,6 +36,7 @@ function BoardPageInner() {
   );
   const [activeTool, setActiveTool] = useState<Tool>("select");
   const [boardName, setBoardName] = useState("Untitled Board");
+  const [isDarkMode, setIsDarkMode] = useState(true);
 
   // Listen to board metadata for the name + auto-add to sharedWith
   useEffect(() => {
@@ -103,12 +104,20 @@ function BoardPageInner() {
           myColor={myColor}
         />
 
-        <button
-          onClick={logout}
-          className="text-gray-400 hover:text-white text-sm"
-        >
-          Sign Out
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className="text-gray-400 hover:text-white text-sm px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition-colors"
+          >
+            {isDarkMode ? "Light" : "Dark"}
+          </button>
+          <button
+            onClick={logout}
+            className="text-gray-400 hover:text-white text-sm"
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
 
       {/* Canvas */}
@@ -117,6 +126,7 @@ function BoardPageInner() {
         cursors={cursors}
         activeTool={activeTool}
         userId={user?.uid || ""}
+        bgColor={isDarkMode ? "#1a1a2e" : "#f0f0f0"}
         onAddObject={addObject}
         onUpdateObject={updateObject}
         onDeleteObject={deleteObject}
