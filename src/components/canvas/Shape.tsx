@@ -9,6 +9,7 @@ interface ShapeProps {
   isSelected: boolean;
   onSelect: () => void;
   onDragEnd: (x: number, y: number) => void;
+  onDragMove?: (x: number, y: number) => void;
   onDblClick?: () => void;
   draggable: boolean;
 }
@@ -18,11 +19,16 @@ export default function Shape({
   isSelected,
   onSelect,
   onDragEnd,
+  onDragMove,
   onDblClick,
   draggable,
 }: ShapeProps) {
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
     onDragEnd(e.target.x(), e.target.y());
+  };
+
+  const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
+    onDragMove?.(e.target.x(), e.target.y());
   };
 
   const strokeColor = isSelected ? "#3b82f6" : "#374151";
@@ -77,6 +83,7 @@ export default function Shape({
       onDblClick={onDblClick}
       onDblTap={onDblClick}
       onDragEnd={handleDragEnd}
+      onDragMove={handleDragMove}
       rotation={obj.rotation}
     >
       {renderShape()}

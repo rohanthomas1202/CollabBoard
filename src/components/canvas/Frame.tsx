@@ -9,6 +9,7 @@ interface FrameProps {
   isSelected: boolean;
   onSelect: () => void;
   onDragEnd: (x: number, y: number) => void;
+  onDragMove?: (x: number, y: number) => void;
   onDblClick: () => void;
   draggable: boolean;
 }
@@ -18,11 +19,16 @@ export default function Frame({
   isSelected,
   onSelect,
   onDragEnd,
+  onDragMove,
   onDblClick,
   draggable,
 }: FrameProps) {
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
     onDragEnd(e.target.x(), e.target.y());
+  };
+
+  const handleDragMove = (e: KonvaEventObject<DragEvent>) => {
+    onDragMove?.(e.target.x(), e.target.y());
   };
 
   return (
@@ -36,6 +42,7 @@ export default function Frame({
       onDblClick={onDblClick}
       onDblTap={onDblClick}
       onDragEnd={handleDragEnd}
+      onDragMove={handleDragMove}
     >
       {/* Frame title */}
       <Text

@@ -53,6 +53,7 @@ export default function BoardCanvas({
 }: BoardCanvasProps) {
   const stageRef = useRef<Konva.Stage>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastDragUpdate = useRef<number>(0);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -266,6 +267,17 @@ export default function BoardCanvas({
     [activeTool, getWorldPointer, objects, userId, onAddObject, onToolChange, connectorFrom, getObjectIdFromTarget]
   );
 
+  // Throttled drag move: broadcast position during drag at ~60ms intervals
+  const handleObjectDragMove = useCallback(
+    (id: string, x: number, y: number) => {
+      const now = Date.now();
+      if (now - lastDragUpdate.current < 60) return;
+      lastDragUpdate.current = now;
+      onUpdateObject(id, { x, y });
+    },
+    [onUpdateObject]
+  );
+
   // Handle drag for panning
   const handleDragEnd = useCallback((e: KonvaEventObject<DragEvent>) => {
     if (e.target === stageRef.current) {
@@ -317,6 +329,7 @@ export default function BoardCanvas({
       isSelected: isSelected || isConnectorSource,
       onSelect: () => setSelectedId(obj.id),
       onDragEnd: (x: number, y: number) => onUpdateObject(obj.id, { x, y }),
+      onDragMove: (x: number, y: number) => handleObjectDragMove(obj.id, x, y),
       draggable: isDraggable,
     };
 
