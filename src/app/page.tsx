@@ -16,6 +16,47 @@ import { Board } from "@/lib/types";
 
 type Tab = "all" | "my" | "shared";
 
+const themes = {
+  dark: {
+    bg: "#0f1117",
+    headerBg: "rgba(26, 29, 39, 0.7)",
+    headerBorder: "#2a2e3d",
+    surface: "#1a1d27",
+    surface2: "#242836",
+    border: "#2a2e3d",
+    borderHover: "#3d4258",
+    text: "#e8eaed",
+    textMuted: "#8b8fa3",
+    textFaint: "#5c6070",
+    cardPreview: "linear-gradient(135deg, #242836, #1a1d27)",
+    previewIcon: "#3d4258",
+    cardShadow: "0 8px 24px rgba(0,0,0,0.3)",
+    toggleBg: "#242836",
+    toggleBorder: "#2a2e3d",
+    toggleColor: "#8b8fa3",
+    deleteBg: "rgba(239,68,68,0.1)",
+  },
+  light: {
+    bg: "#f5f6f8",
+    headerBg: "rgba(255, 255, 255, 0.8)",
+    headerBorder: "#e2e4e8",
+    surface: "#ffffff",
+    surface2: "#f0f1f3",
+    border: "#e2e4e8",
+    borderHover: "#d1d5db",
+    text: "#1f2937",
+    textMuted: "#6b7280",
+    textFaint: "#9ca3af",
+    cardPreview: "linear-gradient(135deg, #f0f1f3, #e8eaf0)",
+    previewIcon: "#d1d5db",
+    cardShadow: "0 8px 24px rgba(0,0,0,0.08)",
+    toggleBg: "#f0f1f3",
+    toggleBorder: "#e2e4e8",
+    toggleColor: "#6b7280",
+    deleteBg: "rgba(239,68,68,0.08)",
+  },
+};
+
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -25,6 +66,9 @@ export default function DashboardPage() {
   const [boardsLoading, setBoardsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isDark, setIsDark] = useState(true);
+
+  const t = isDark ? themes.dark : themes.light;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -99,10 +143,10 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0f1117" }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: t.bg }}>
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#4f7df9", borderTopColor: "transparent" }} />
-          <span style={{ color: "#8b8fa3" }} className="text-sm">Loading...</span>
+          <span style={{ color: t.textMuted }} className="text-sm">Loading...</span>
         </div>
       </div>
     );
@@ -119,9 +163,9 @@ export default function DashboardPage() {
   const userInitial = (user.displayName || user.email || "U")[0].toUpperCase();
 
   return (
-    <div className="min-h-screen" style={{ background: "#0f1117" }}>
+    <div className="min-h-screen" style={{ background: t.bg }}>
       {/* Header */}
-      <header style={{ background: "rgba(26, 29, 39, 0.7)", backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderBottom: "1px solid #2a2e3d" }}>
+      <header style={{ background: t.headerBg, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderBottom: `1px solid ${t.headerBorder}` }}>
         <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4f7df9, #3b6ce8)" }}>
@@ -132,23 +176,40 @@ export default function DashboardPage() {
                 <rect x="14" y="14" width="7" height="7" rx="1" />
               </svg>
             </div>
-            <h1 className="text-base font-semibold" style={{ color: "#e8eaed" }}>CollabBoard</h1>
+            <h1 className="text-base font-semibold" style={{ color: t.text }}>CollabBoard</h1>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl" style={{ background: "#242836" }}>
+            {/* Theme toggle */}
+            <button
+              onClick={() => setIsDark(!isDark)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer"
+              style={{ background: t.toggleBg, border: `1px solid ${t.toggleBorder}`, color: t.toggleColor }}
+              title={isDark ? "Switch to light" : "Switch to dark"}
+            >
+              {isDark ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                </svg>
+              )}
+            </button>
+            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl" style={{ background: t.surface2 }}>
               <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white" style={{ background: "linear-gradient(135deg, #4f7df9, #8b5cf6)" }}>
                 {userInitial}
               </div>
-              <span className="text-sm" style={{ color: "#8b8fa3" }}>
+              <span className="text-sm" style={{ color: t.textMuted }}>
                 {user.displayName || user.email}
               </span>
             </div>
             <button
               onClick={logout}
               className="text-sm px-3 py-1.5 rounded-xl transition-all duration-200 cursor-pointer"
-              style={{ color: "#8b8fa3", background: "transparent" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#242836"; e.currentTarget.style.color = "#e8eaed"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8b8fa3"; }}
+              style={{ color: t.textMuted, background: "transparent" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = t.surface2; e.currentTarget.style.color = t.text; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = t.textMuted; }}
             >
               Sign Out
             </button>
@@ -160,16 +221,16 @@ export default function DashboardPage() {
       <main className="max-w-6xl mx-auto px-6 py-8">
         <div className="flex items-center justify-between mb-8">
           {/* Tabs */}
-          <div className="flex gap-1 p-1 rounded-xl" style={{ background: "#1a1d27" }}>
+          <div className="flex gap-1 p-1 rounded-xl" style={{ background: t.surface }}>
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer"
                 style={{
-                  background: activeTab === tab.key ? "#242836" : "transparent",
-                  color: activeTab === tab.key ? "#e8eaed" : "#8b8fa3",
-                  boxShadow: activeTab === tab.key ? "0 1px 3px rgba(0,0,0,0.2)" : "none",
+                  background: activeTab === tab.key ? t.surface2 : "transparent",
+                  color: activeTab === tab.key ? t.text : t.textMuted,
+                  boxShadow: activeTab === tab.key ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
                 }}
               >
                 {tab.label}
@@ -205,10 +266,10 @@ export default function DashboardPage() {
                 <line x1="8" y1="12" x2="16" y2="12" />
               </svg>
             </div>
-            <p className="mb-1 font-medium" style={{ color: "#e8eaed" }}>
+            <p className="mb-1 font-medium" style={{ color: t.text }}>
               {activeTab === "shared" ? "No shared boards yet" : "No boards yet"}
             </p>
-            <p className="text-sm mb-6" style={{ color: "#5c6070" }}>
+            <p className="text-sm mb-6" style={{ color: t.textFaint }}>
               {activeTab === "shared"
                 ? "Boards shared with you will appear here."
                 : "Create your first collaborative whiteboard."}
@@ -231,14 +292,14 @@ export default function DashboardPage() {
                 <div
                   key={board.id}
                   className="rounded-2xl p-4 transition-all duration-200 cursor-pointer group"
-                  style={{ background: "#1a1d27", border: "1px solid #2a2e3d" }}
+                  style={{ background: t.surface, border: `1px solid ${t.border}` }}
                   onClick={() => router.push(`/board/${board.id}`)}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#3d4258"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,0,0,0.3)"; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "#2a2e3d"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.borderHover; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = t.cardShadow; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
                 >
                   {/* Preview area */}
-                  <div className="h-32 rounded-xl mb-3 flex items-center justify-center relative overflow-hidden" style={{ background: "linear-gradient(135deg, #242836, #1a1d27)" }}>
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#3d4258" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                  <div className="h-32 rounded-xl mb-3 flex items-center justify-center relative overflow-hidden" style={{ background: t.cardPreview }}>
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={t.previewIcon} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="7" height="7" rx="1" />
                       <rect x="14" y="3" width="7" height="7" rx="1" />
                       <rect x="3" y="14" width="7" height="7" rx="1" />
@@ -256,18 +317,18 @@ export default function DashboardPage() {
                     <div className="min-w-0 flex-1">
                       <h3
                         className="font-medium text-sm truncate transition-colors duration-200"
-                        style={{ color: "#e8eaed" }}
+                        style={{ color: t.text }}
                         onClick={(e) => {
                           e.stopPropagation();
                           renameBoardHandler(board.id, board.name);
                         }}
                         title="Click to rename"
                         onMouseEnter={(e) => { e.currentTarget.style.color = "#4f7df9"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = "#e8eaed"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.color = t.text; }}
                       >
                         {board.name}
                       </h3>
-                      <p className="text-xs mt-1" style={{ color: "#5c6070" }}>
+                      <p className="text-xs mt-1" style={{ color: t.textFaint }}>
                         {new Date(board.createdAt).toLocaleDateString()}
                       </p>
                     </div>
@@ -278,9 +339,9 @@ export default function DashboardPage() {
                           deleteBoardHandler(board.id);
                         }}
                         className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1.5 rounded-lg cursor-pointer"
-                        style={{ color: "#5c6070" }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.1)"; e.currentTarget.style.color = "#ef4444"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#5c6070"; }}
+                        style={{ color: t.textFaint }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = t.deleteBg; e.currentTarget.style.color = "#ef4444"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = t.textFaint; }}
                         title="Delete board"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
