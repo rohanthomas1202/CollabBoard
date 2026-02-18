@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { doc, onSnapshot, updateDoc, arrayUnion } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useBoard } from "@/hooks/useBoard";
 import { usePresence } from "@/hooks/usePresence";
@@ -33,6 +35,35 @@ function BoardPageInner() {
     user?.displayName || user?.email || "Anonymous"
   );
   const [activeTool, setActiveTool] = useState<Tool>("select");
+  const [boardName, setBoardName] = useState("Untitled Board");
+
+  // Listen to board metadata for the name + auto-add to sharedWith
+  useEffect(() => {
+    if (!boardId) return;
+    const unsubscribe = onSnapshot(doc(db, "boards", boardId), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setBoardName(data.name || "Untitled Board");
+        // Auto-add user to sharedWith if they're not the owner
+        if (user && data.ownerId !== user.uid) {
+          const shared = data.sharedWith || [];
+          if (!shared.includes(user.uid)) {
+            updateDoc(doc(db, "boards", boardId), {
+              sharedWith: arrayUnion(user.uid),
+            });
+          }
+        }
+      }
+    });
+    return unsubscribe;
+  }, [boardId, user]);
+
+  const handleRename = useCallback(() => {
+    const newName = prompt("Rename board:", boardName);
+    if (!newName || newName === boardName) return;
+    updateDoc(doc(db, "boards", boardId), { name: newName, updatedAt: Date.now() });
+    setBoardName(newName);
+  }, [boardId, boardName]);
 
   const handleToolChange = useCallback((tool: Tool) => {
     setActiveTool(tool);
@@ -57,7 +88,13 @@ function BoardPageInner() {
           >
             &larr; Boards
           </button>
-          <h1 className="text-white font-medium text-sm">Board: {boardId.slice(0, 8)}</h1>
+          <h1
+            className="text-white font-medium text-sm hover:text-blue-400 cursor-pointer"
+            onClick={handleRename}
+            title="Click to rename"
+          >
+            {boardName}
+          </h1>
         </div>
 
         <PresenceBar
