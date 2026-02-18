@@ -25,7 +25,7 @@ interface BoardCanvasProps {
   onDeleteObject: (id: string) => void;
   onCursorMove: (x: number, y: number) => void;
   onToolChange: (tool: Tool) => void;
-  onThumbnailCapture?: (dataUrl: string) => void;
+  onThumbnailCapture?: (dataUrl: string, force?: boolean) => void;
 }
 
 interface EditState {
@@ -73,10 +73,10 @@ export default function BoardCanvas({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Capture thumbnail periodically and on unmount
+  // Capture thumbnail periodically, on unmount, and on page close
   useEffect(() => {
     if (!onThumbnailCapture) return;
-    const capture = () => {
+    const capture = (force?: boolean) => {
       const stage = stageRef.current;
       if (!stage) return;
       try {
@@ -85,18 +85,23 @@ export default function BoardCanvas({
           mimeType: "image/jpeg",
           quality: 0.5,
         });
-        onThumbnailCapture(dataUrl);
+        onThumbnailCapture(dataUrl, force);
       } catch {
         // Canvas may be tainted or empty
       }
     };
-    const interval = setInterval(capture, 30000);
+    const handleBeforeUnload = () => {
+      capture(true);
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    const interval = setInterval(() => capture(), 30000);
     // Capture once after a short delay (let objects render)
-    const initial = setTimeout(capture, 3000);
+    const initial = setTimeout(() => capture(), 3000);
     return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       clearInterval(interval);
       clearTimeout(initial);
-      capture(); // Capture on unmount
+      capture(true); // Force capture on unmount (navigating away)
     };
   }, [onThumbnailCapture]);
 

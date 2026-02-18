@@ -42,11 +42,11 @@ function BoardPageInner() {
   const lastThumbnailSave = useRef<number>(0);
 
   const handleThumbnailCapture = useCallback(
-    (dataUrl: string) => {
+    (dataUrl: string, force?: boolean) => {
       if (!boardId) return;
-      // Throttle saves to at most once per 25 seconds
       const now = Date.now();
-      if (now - lastThumbnailSave.current < 25000) return;
+      // Skip throttle when force is true (page close / unmount)
+      if (!force && now - lastThumbnailSave.current < 25000) return;
       lastThumbnailSave.current = now;
       updateDoc(doc(db, "boards", boardId), { thumbnail: dataUrl }).catch(() => {});
     },
