@@ -13,12 +13,14 @@ import Toolbar from "@/components/toolbar/Toolbar";
 import PresenceBar from "@/components/ui/PresenceBar";
 import { Tool } from "@/lib/types";
 
-// Dynamic import for Konva (no SSR)
 const BoardCanvas = dynamic(() => import("@/components/canvas/Board"), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center h-screen bg-[#1a1a2e]">
-      <div className="text-white">Loading board...</div>
+    <div className="flex items-center justify-center h-screen" style={{ background: "#0f1117" }}>
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#4f7df9", borderTopColor: "transparent" }} />
+        <span style={{ color: "#8b8fa3" }} className="text-sm">Loading board...</span>
+      </div>
     </div>
   ),
 });
@@ -38,14 +40,12 @@ function BoardPageInner() {
   const [boardName, setBoardName] = useState("Untitled Board");
   const [isDarkMode, setIsDarkMode] = useState(true);
 
-  // Listen to board metadata for the name + auto-add to sharedWith
   useEffect(() => {
     if (!boardId) return;
     const unsubscribe = onSnapshot(doc(db, "boards", boardId), (snap) => {
       if (snap.exists()) {
         const data = snap.data();
         setBoardName(data.name || "Untitled Board");
-        // Auto-add user to sharedWith if they're not the owner
         if (user && data.ownerId !== user.uid) {
           const shared = data.sharedWith || [];
           if (!shared.includes(user.uid)) {
@@ -72,27 +72,48 @@ function BoardPageInner() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[#1a1a2e]">
-        <div className="text-white">Loading board...</div>
+      <div className="flex items-center justify-center h-screen" style={{ background: "#0f1117" }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#4f7df9", borderTopColor: "transparent" }} />
+          <span style={{ color: "#8b8fa3" }} className="text-sm">Loading board...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative bg-[#1a1a2e]">
+    <div className="h-screen w-screen overflow-hidden relative" style={{ background: isDarkMode ? "#0f1117" : "#f5f6f8" }}>
       {/* Top bar */}
-      <div className="absolute top-0 left-0 right-0 h-12 bg-gray-900/90 backdrop-blur border-b border-gray-800 flex items-center justify-between px-4 z-50">
-        <div className="flex items-center gap-4">
+      <div
+        className="absolute top-0 left-0 right-0 h-12 flex items-center justify-between px-4 z-50"
+        style={{
+          background: isDarkMode ? "rgba(26, 29, 39, 0.75)" : "rgba(255, 255, 255, 0.8)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
+        }}
+      >
+        <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/")}
-            className="text-gray-400 hover:text-white text-sm"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm transition-all duration-200 cursor-pointer"
+            style={{ color: isDarkMode ? "#8b8fa3" : "#6b7280", background: "transparent" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = isDarkMode ? "#242836" : "#f0f0f2"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
           >
-            &larr; Boards
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+            Boards
           </button>
+          <div className="w-px h-5" style={{ background: isDarkMode ? "#2a2e3d" : "#e2e4e8" }} />
           <h1
-            className="text-white font-medium text-sm hover:text-blue-400 cursor-pointer"
+            className="font-medium text-sm cursor-pointer transition-colors duration-200"
             onClick={handleRename}
             title="Click to rename"
+            style={{ color: isDarkMode ? "#e8eaed" : "#1f2937" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#4f7df9"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = isDarkMode ? "#e8eaed" : "#1f2937"; }}
           >
             {boardName}
           </h1>
@@ -104,16 +125,45 @@ function BoardPageInner() {
           myColor={myColor}
         />
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Theme toggle */}
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
-            className="text-gray-400 hover:text-white text-sm px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition-colors"
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer"
+            style={{
+              background: isDarkMode ? "#242836" : "#f0f0f2",
+              color: isDarkMode ? "#8b8fa3" : "#6b7280",
+              border: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = isDarkMode ? "#3d4258" : "#d1d5db"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = isDarkMode ? "#2a2e3d" : "#e2e4e8"; }}
+            title={isDarkMode ? "Switch to light" : "Switch to dark"}
           >
-            {isDarkMode ? "Light" : "Dark"}
+            {isDarkMode ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="5" />
+                <line x1="12" y1="1" x2="12" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="23" />
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                <line x1="1" y1="12" x2="3" y2="12" />
+                <line x1="21" y1="12" x2="23" y2="12" />
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+              </svg>
+            )}
           </button>
+
           <button
             onClick={logout}
-            className="text-gray-400 hover:text-white text-sm"
+            className="text-sm px-2.5 py-1.5 rounded-lg transition-all duration-200 cursor-pointer"
+            style={{ color: isDarkMode ? "#8b8fa3" : "#6b7280", background: "transparent" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = isDarkMode ? "#242836" : "#f0f0f2"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
           >
             Sign Out
           </button>
@@ -126,7 +176,7 @@ function BoardPageInner() {
         cursors={cursors}
         activeTool={activeTool}
         userId={user?.uid || ""}
-        bgColor={isDarkMode ? "#1a1a2e" : "#f0f0f0"}
+        bgColor={isDarkMode ? "#0f1117" : "#f5f6f8"}
         onAddObject={addObject}
         onUpdateObject={updateObject}
         onDeleteObject={deleteObject}
@@ -138,7 +188,16 @@ function BoardPageInner() {
       <Toolbar activeTool={activeTool} onToolChange={handleToolChange} />
 
       {/* Zoom indicator */}
-      <div className="absolute bottom-6 right-6 bg-gray-900/80 text-gray-300 text-xs px-3 py-1.5 rounded-lg border border-gray-700 z-50">
+      <div
+        className="absolute bottom-6 right-6 text-xs px-3 py-1.5 rounded-lg z-50"
+        style={{
+          background: isDarkMode ? "rgba(26, 29, 39, 0.8)" : "rgba(255, 255, 255, 0.8)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          color: isDarkMode ? "#5c6070" : "#9ca3af",
+          border: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
+        }}
+      >
         Scroll to zoom | Space+drag to pan
       </div>
     </div>
