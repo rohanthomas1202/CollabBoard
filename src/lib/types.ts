@@ -30,6 +30,7 @@ export interface Board {
   name: string;
   ownerId: string;
   sharedWith?: string[];
+  thumbnail?: string;
   createdAt: number;
   updatedAt: number;
 }

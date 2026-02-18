@@ -25,6 +25,7 @@ interface BoardCanvasProps {
   onDeleteObject: (id: string) => void;
   onCursorMove: (x: number, y: number) => void;
   onToolChange: (tool: Tool) => void;
+  onThumbnailCapture?: (dataUrl: string) => void;
 }
 
 interface EditState {
@@ -50,6 +51,7 @@ export default function BoardCanvas({
   onDeleteObject,
   onCursorMove,
   onToolChange,
+  onThumbnailCapture,
 }: BoardCanvasProps) {
   const stageRef = useRef<Konva.Stage>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -70,6 +72,33 @@ export default function BoardCanvas({
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Capture thumbnail periodically and on unmount
+  useEffect(() => {
+    if (!onThumbnailCapture) return;
+    const capture = () => {
+      const stage = stageRef.current;
+      if (!stage) return;
+      try {
+        const dataUrl = stage.toDataURL({
+          pixelRatio: 0.3,
+          mimeType: "image/jpeg",
+          quality: 0.5,
+        });
+        onThumbnailCapture(dataUrl);
+      } catch {
+        // Canvas may be tainted or empty
+      }
+    };
+    const interval = setInterval(capture, 30000);
+    // Capture once after a short delay (let objects render)
+    const initial = setTimeout(capture, 3000);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(initial);
+      capture(); // Capture on unmount
+    };
+  }, [onThumbnailCapture]);
 
   // Focus textarea only when editing starts (not on every text change)
   useEffect(() => {

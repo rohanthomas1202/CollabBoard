@@ -299,12 +299,21 @@ export default function DashboardPage() {
                 >
                   {/* Preview area */}
                   <div className="h-32 rounded-xl mb-3 flex items-center justify-center relative overflow-hidden" style={{ background: t.cardPreview }}>
-                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={t.previewIcon} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="7" height="7" rx="1" />
-                      <rect x="14" y="3" width="7" height="7" rx="1" />
-                      <rect x="3" y="14" width="7" height="7" rx="1" />
-                      <rect x="14" y="14" width="7" height="7" rx="1" />
-                    </svg>
+                    {board.thumbnail ? (
+                      <img
+                        src={board.thumbnail}
+                        alt={board.name}
+                        className="w-full h-full object-cover rounded-xl"
+                        draggable={false}
+                      />
+                    ) : (
+                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={t.previewIcon} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="3" width="7" height="7" rx="1" />
+                        <rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" />
+                        <rect x="14" y="14" width="7" height="7" rx="1" />
+                      </svg>
+                    )}
                     {!isOwner && (
                       <span className="absolute top-2 right-2 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(79, 125, 249, 0.15)", color: "#4f7df9" }}>
                         Shared

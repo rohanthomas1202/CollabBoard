@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { doc, onSnapshot, updateDoc, arrayUnion } from "firebase/firestore";
@@ -39,6 +39,19 @@ function BoardPageInner() {
   const [activeTool, setActiveTool] = useState<Tool>("select");
   const [boardName, setBoardName] = useState("Untitled Board");
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const lastThumbnailSave = useRef<number>(0);
+
+  const handleThumbnailCapture = useCallback(
+    (dataUrl: string) => {
+      if (!boardId) return;
+      // Throttle saves to at most once per 25 seconds
+      const now = Date.now();
+      if (now - lastThumbnailSave.current < 25000) return;
+      lastThumbnailSave.current = now;
+      updateDoc(doc(db, "boards", boardId), { thumbnail: dataUrl }).catch(() => {});
+    },
+    [boardId]
+  );
 
   useEffect(() => {
     if (!boardId) return;
@@ -182,6 +195,7 @@ function BoardPageInner() {
         onDeleteObject={deleteObject}
         onCursorMove={updateCursor}
         onToolChange={handleToolChange}
+        onThumbnailCapture={handleThumbnailCapture}
       />
 
       {/* Toolbar */}
