@@ -29,7 +29,7 @@ jest.mock("ai", () => ({
   UIMessage: {},
 }));
 
-import { POST } from "../route";
+import { POST, rectsOverlap, resolvePosition, OVERLAP_GAP } from "../route";
 
 /** Helper: build a Request with the token header and JSON body */
 function makeRequest(
@@ -124,9 +124,15 @@ describe("POST /api/chat", () => {
     const args = mockStreamText.mock.calls[0][0];
     expect(args.model).toBe("mock-model");
     expect(args.system).toContain("AI board assistant");
+    expect(args.system).toContain("createObjects");
+    expect(args.system).toContain("batchMutate");
+    expect(args.system).toContain("automatically prevents overlaps");
+    expect(args.system).not.toContain(
+      "space them out so they don't overlap"
+    );
     expect(args.stopWhen).toBe(15);
 
-    // Verify all 10 tools are defined with execute functions
+    // Verify all 12 tools are defined with execute functions
     const toolNames = Object.keys(args.tools);
     expect(toolNames).toContain("getBoardState");
     expect(toolNames).toContain("createStickyNote");
@@ -134,11 +140,13 @@ describe("POST /api/chat", () => {
     expect(toolNames).toContain("createTextElement");
     expect(toolNames).toContain("createFrame");
     expect(toolNames).toContain("createConnector");
+    expect(toolNames).toContain("createObjects");
     expect(toolNames).toContain("moveObject");
     expect(toolNames).toContain("updateText");
     expect(toolNames).toContain("changeColor");
     expect(toolNames).toContain("deleteObject");
-    expect(toolNames).toHaveLength(10);
+    expect(toolNames).toContain("batchMutate");
+    expect(toolNames).toHaveLength(12);
 
     // Tools SHOULD have execute (server-side execution via Firestore REST API)
     for (const name of toolNames) {
@@ -162,5 +170,73 @@ describe("POST /api/chat", () => {
 
     const streamResult = mockStreamText.mock.results[0].value;
     expect(streamResult.toUIMessageStreamResponse).toHaveBeenCalled();
+  });
+});
+
+describe("rectsOverlap", () => {
+  it("returns true for overlapping rects", () => {
+    const a = { x: 0, y: 0, width: 100, height: 100 };
+    const b = { x: 50, y: 50, width: 100, height: 100 };
+    expect(rectsOverlap(a, b, OVERLAP_GAP)).toBe(true);
+  });
+
+  it("returns false for rects with sufficient gap", () => {
+    const a = { x: 0, y: 0, width: 100, height: 100 };
+    const b = { x: 125, y: 0, width: 100, height: 100 };
+    expect(rectsOverlap(a, b, OVERLAP_GAP)).toBe(false);
+  });
+
+  it("returns true when gap is insufficient", () => {
+    const a = { x: 0, y: 0, width: 100, height: 100 };
+    const b = { x: 110, y: 0, width: 100, height: 100 };
+    // Only 10px gap, need 20
+    expect(rectsOverlap(a, b, OVERLAP_GAP)).toBe(true);
+  });
+
+  it("returns false for rects exactly gap-apart", () => {
+    const a = { x: 0, y: 0, width: 100, height: 100 };
+    const b = { x: 120, y: 0, width: 100, height: 100 };
+    // Exactly 20px gap
+    expect(rectsOverlap(a, b, OVERLAP_GAP)).toBe(false);
+  });
+
+  it("returns false for vertically separated rects", () => {
+    const a = { x: 0, y: 0, width: 100, height: 100 };
+    const b = { x: 0, y: 200, width: 100, height: 100 };
+    expect(rectsOverlap(a, b, OVERLAP_GAP)).toBe(false);
+  });
+});
+
+describe("resolvePosition", () => {
+  it("returns original position when no overlaps", () => {
+    const proposed = { x: 0, y: 0, width: 200, height: 200 };
+    const result = resolvePosition(proposed, [], OVERLAP_GAP);
+    expect(result).toEqual({ x: 0, y: 0 });
+  });
+
+  it("shifts right past overlapping rect", () => {
+    const proposed = { x: 0, y: 0, width: 200, height: 200 };
+    const occupied = [{ x: 0, y: 0, width: 200, height: 200 }];
+    const result = resolvePosition(proposed, occupied, OVERLAP_GAP);
+    expect(result.x).toBe(220); // 200 + 20 gap
+    expect(result.y).toBe(0);
+  });
+
+  it("jumps past multiple overlapping rects", () => {
+    const proposed = { x: 0, y: 0, width: 100, height: 100 };
+    const occupied = [
+      { x: 0, y: 0, width: 100, height: 100 },
+      { x: 120, y: 0, width: 100, height: 100 },
+    ];
+    const result = resolvePosition(proposed, occupied, OVERLAP_GAP);
+    expect(result.x).toBe(240); // past second rect: 120 + 100 + 20
+    expect(result.y).toBe(0);
+  });
+
+  it("returns original position when no conflict exists", () => {
+    const proposed = { x: 500, y: 500, width: 200, height: 200 };
+    const occupied = [{ x: 0, y: 0, width: 100, height: 100 }];
+    const result = resolvePosition(proposed, occupied, OVERLAP_GAP);
+    expect(result).toEqual({ x: 500, y: 500 });
   });
 });

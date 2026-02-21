@@ -13,6 +13,56 @@ import { langfuseSpanProcessor } from "@/instrumentation";
 
 export const maxDuration = 60;
 
+// --- Overlap prevention ---
+
+interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export const OVERLAP_GAP = 20;
+
+export function rectsOverlap(a: Rect, b: Rect, gap: number): boolean {
+  return !(
+    a.x + a.width + gap <= b.x ||
+    b.x + b.width + gap <= a.x ||
+    a.y + a.height + gap <= b.y ||
+    b.y + b.height + gap <= a.y
+  );
+}
+
+export function resolvePosition(
+  proposed: Rect,
+  occupied: Rect[],
+  gap: number
+): { x: number; y: number } {
+  if (!occupied.some((o) => rectsOverlap(proposed, o, gap))) {
+    return { x: proposed.x, y: proposed.y };
+  }
+  let cx = proposed.x;
+  let cy = proposed.y;
+  for (let i = 0; i < 200; i++) {
+    const c = { x: cx, y: cy, width: proposed.width, height: proposed.height };
+    if (!occupied.some((o) => rectsOverlap(c, o, gap))) {
+      return { x: cx, y: cy };
+    }
+    let maxRight = cx;
+    for (const o of occupied) {
+      if (rectsOverlap(c, o, gap)) {
+        maxRight = Math.max(maxRight, o.x + o.width + gap);
+      }
+    }
+    cx = maxRight;
+    if (cx - proposed.x > 5000) {
+      cx = proposed.x;
+      cy += proposed.height + gap;
+    }
+  }
+  return { x: cx, y: cy };
+}
+
 const PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 
@@ -195,23 +245,81 @@ export async function POST(req: Request) {
     return new Response("Missing authentication token", { status: 401 });
   }
 
-  // Per-request zIndex tracker to avoid repeated list queries
+  // Per-request caches — single firestoreList call shared by zIndex and overlap
+  let cachedObjects: Array<Record<string, unknown>> | null = null;
   let cachedMaxZIndex: number | null = null;
+  const occupiedFrames: Rect[] = [];
+  const occupiedNonFrames: Rect[] = [];
+  let occupiedInitialized = false;
+
+  async function getCachedObjects(): Promise<Array<Record<string, unknown>>> {
+    if (cachedObjects !== null) return cachedObjects;
+    cachedObjects = (await firestoreList(
+      idToken,
+      boardId
+    )) as Array<Record<string, unknown>>;
+    return cachedObjects;
+  }
+
   async function getNextZIndex(): Promise<number> {
-    if (cachedMaxZIndex !== null) {
-      return ++cachedMaxZIndex;
-    }
-    const objects = await firestoreList(idToken, boardId);
+    if (cachedMaxZIndex !== null) return ++cachedMaxZIndex;
+    const objects = await getCachedObjects();
     const maxZ =
       objects.length === 0
         ? 0
-        : Math.max(
-            ...objects.map(
-              (o) => ((o as Record<string, unknown>).zIndex as number) || 0
-            )
-          );
+        : Math.max(...objects.map((o) => (o.zIndex as number) || 0));
     cachedMaxZIndex = maxZ + 1;
     return cachedMaxZIndex;
+  }
+
+  async function allocateZIndices(count: number): Promise<number> {
+    if (cachedMaxZIndex === null) {
+      const objects = await getCachedObjects();
+      const maxZ =
+        objects.length === 0
+          ? 0
+          : Math.max(...objects.map((o) => (o.zIndex as number) || 0));
+      cachedMaxZIndex = maxZ;
+    }
+    const startZ = cachedMaxZIndex + 1;
+    cachedMaxZIndex += count;
+    return startZ;
+  }
+
+  async function initOccupied(): Promise<void> {
+    if (occupiedInitialized) return;
+    const objects = await getCachedObjects();
+    for (const o of objects) {
+      if (o.type === "connector") continue;
+      const rect: Rect = {
+        x: (o.x as number) || 0,
+        y: (o.y as number) || 0,
+        width: (o.width as number) || 0,
+        height: (o.height as number) || 0,
+      };
+      if (o.type === "frame") {
+        occupiedFrames.push(rect);
+      } else {
+        occupiedNonFrames.push(rect);
+      }
+    }
+    occupiedInitialized = true;
+  }
+
+  async function adjustPosition(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    objectType: string
+  ): Promise<{ x: number; y: number }> {
+    await initOccupied();
+    // Frames check against other frames; non-frames check against non-frames
+    const occupied = objectType === "frame" ? occupiedFrames : occupiedNonFrames;
+    const pos = resolvePosition({ x, y, width: w, height: h }, occupied, OVERLAP_GAP);
+    // Register so subsequent creates in same request see this object
+    occupied.push({ x: pos.x, y: pos.y, width: w, height: h });
+    return pos;
   }
 
   const result = streamText({
@@ -220,27 +328,50 @@ export async function POST(req: Request) {
 You help users create, arrange, and manipulate objects on their whiteboard.
 
 IMPORTANT RULES:
-- When creating multiple objects, space them out so they don't overlap. Use at least 20px gaps.
-- Call getBoardState first when you need to understand the current layout, find objects, or plan spatial arrangements.
+- The server automatically prevents overlaps (20px gap). Just provide approximate positions for your intended layout.
+- Call getBoardState only when you need to find existing objects or reference their IDs. Pass objectTypes to filter and reduce response size.
 - Sticky note colors (pastel): #fef08a (yellow), #fed7aa (orange), #bbf7d0 (green), #bfdbfe (blue), #e9d5ff (purple), #fecdd3 (pink)
 - Shape colors (vivid): #3b82f6 (blue), #ef4444 (red), #22c55e (green), #f59e0b (amber), #8b5cf6 (purple), #06b6d4 (cyan), #f97316 (orange)
 - Default dimensions: sticky-note 200x200, rectangle 200x150, circle 150x150, text 200x40, frame 400x300
 - For templates (SWOT, retro, journey map), use frames as containers and place sticky notes inside them.
 - Always provide a brief summary of what you did after completing operations.
-- When arranging in a grid, calculate positions based on object dimensions plus 20px gaps.
 - Connector color default is #6b7280 (gray).
-- For complex templates, create the frames first, then add sticky notes inside each frame.`,
+- For complex templates, create the frames first, then add sticky notes inside each frame.
+- ALWAYS prefer createObjects over individual create tools when making 2 or more objects. This is significantly faster.
+- ALWAYS prefer batchMutate over individual moveObject/updateText/changeColor/deleteObject when modifying 2 or more objects.
+- Connectors must still be created individually after batch-creating objects, since they need the returned IDs.`,
     messages: await convertToModelMessages(messages),
     tools: {
       getBoardState: tool({
         description:
-          "Get all objects currently on the board. Call this first when you need to understand the current layout, find objects by text content, or plan spatial arrangements.",
-        inputSchema: z.object({}),
-        execute: async () => {
+          "Get objects on the board. Pass objectTypes to filter and reduce response size. Call when you need to find existing objects or reference their IDs.",
+        inputSchema: z.object({
+          objectTypes: z
+            .array(
+              z.enum([
+                "sticky-note",
+                "rectangle",
+                "circle",
+                "text",
+                "frame",
+                "connector",
+              ])
+            )
+            .optional()
+            .describe(
+              "Only return these types. Omit for all objects."
+            ),
+        }),
+        execute: async ({ objectTypes }) => {
           const objects = await firestoreList(idToken, boardId);
+          const filtered = objectTypes
+            ? objects.filter((o: Record<string, unknown>) =>
+                (objectTypes as string[]).includes(o.type as string)
+              )
+            : objects;
           return {
-            objectCount: objects.length,
-            objects: objects.map((o: Record<string, unknown>) => ({
+            objectCount: filtered.length,
+            objects: filtered.map((o: Record<string, unknown>) => ({
               id: o.id,
               type: o.type,
               x: o.x,
@@ -277,14 +408,17 @@ IMPORTANT RULES:
             .describe("Height in pixels. Default: 200"),
         }),
         execute: async ({ text, x, y, color, width, height }) => {
+          const w = width ?? 200;
+          const h = height ?? 200;
+          const pos = await adjustPosition(x, y, w, h, "sticky-note");
           const zIndex = await getNextZIndex();
           const id = randomUUID();
           await firestoreCreate(idToken, boardId, id, {
             type: "sticky-note",
-            x,
-            y,
-            width: width ?? 200,
-            height: height ?? 200,
+            x: pos.x,
+            y: pos.y,
+            width: w,
+            height: h,
             text,
             color: color ?? "#fef08a",
             rotation: 0,
@@ -332,14 +466,17 @@ IMPORTANT RULES:
             type === "rectangle"
               ? { width: 200, height: 150 }
               : { width: 150, height: 150 };
+          const w = width ?? defaults.width;
+          const h = height ?? defaults.height;
+          const pos = await adjustPosition(x, y, w, h, type);
           const zIndex = await getNextZIndex();
           const id = randomUUID();
           await firestoreCreate(idToken, boardId, id, {
             type,
-            x,
-            y,
-            width: width ?? defaults.width,
-            height: height ?? defaults.height,
+            x: pos.x,
+            y: pos.y,
+            width: w,
+            height: h,
             color: color ?? "#3b82f6",
             text,
             rotation: 0,
@@ -369,14 +506,17 @@ IMPORTANT RULES:
             .describe("Font size. Default: 20"),
         }),
         execute: async ({ text, x, y, color, fontSize }) => {
+          const w = Math.max(200, text.length * 12);
+          const h = 40;
+          const pos = await adjustPosition(x, y, w, h, "text");
           const zIndex = await getNextZIndex();
           const id = randomUUID();
           await firestoreCreate(idToken, boardId, id, {
             type: "text",
-            x,
-            y,
-            width: Math.max(200, text.length * 12),
-            height: 40,
+            x: pos.x,
+            y: pos.y,
+            width: w,
+            height: h,
             text,
             color: color ?? "#e8eaed",
             rotation: 0,
@@ -406,14 +546,17 @@ IMPORTANT RULES:
             .describe("Height. Default: 300"),
         }),
         execute: async ({ title, x, y, width, height }) => {
+          const w = width ?? 400;
+          const h = height ?? 300;
+          const pos = await adjustPosition(x, y, w, h, "frame");
           const zIndex = await getNextZIndex();
           const id = randomUUID();
           await firestoreCreate(idToken, boardId, id, {
             type: "frame",
-            x,
-            y,
-            width: width ?? 400,
-            height: height ?? 300,
+            x: pos.x,
+            y: pos.y,
+            width: w,
+            height: h,
             text: title,
             color: "#4b5563",
             rotation: 0,
@@ -454,6 +597,151 @@ IMPORTANT RULES:
             createdBy: userId,
           });
           return { id, status: "created" };
+        },
+      }),
+
+      createObjects: tool({
+        description:
+          "Create multiple objects on the board in a single operation. Use this instead of calling individual create tools when making 2 or more objects. Supports sticky notes, shapes, text elements, and frames.",
+        inputSchema: z.object({
+          objects: z
+            .array(
+              z.union([
+                z.object({
+                  type: z.literal("sticky-note"),
+                  text: z.string().describe("Sticky note text content"),
+                  x: z.number().describe("X position"),
+                  y: z.number().describe("Y position"),
+                  color: z.string().optional().describe("Hex color. Default: #fef08a"),
+                  width: z.number().optional().describe("Width. Default: 200"),
+                  height: z.number().optional().describe("Height. Default: 200"),
+                }),
+                z.object({
+                  type: z.literal("rectangle"),
+                  x: z.number().describe("X position"),
+                  y: z.number().describe("Y position"),
+                  width: z.number().optional().describe("Width. Default: 200"),
+                  height: z.number().optional().describe("Height. Default: 150"),
+                  color: z.string().optional().describe("Hex color. Default: #3b82f6"),
+                  text: z.string().optional().describe("Optional text label"),
+                }),
+                z.object({
+                  type: z.literal("circle"),
+                  x: z.number().describe("X position"),
+                  y: z.number().describe("Y position"),
+                  width: z.number().optional().describe("Width. Default: 150"),
+                  height: z.number().optional().describe("Height. Default: 150"),
+                  color: z.string().optional().describe("Hex color. Default: #3b82f6"),
+                  text: z.string().optional().describe("Optional text label"),
+                }),
+                z.object({
+                  type: z.literal("text"),
+                  text: z.string().describe("Text content"),
+                  x: z.number().describe("X position"),
+                  y: z.number().describe("Y position"),
+                  color: z.string().optional().describe("Text color. Default: #e8eaed"),
+                  fontSize: z.number().optional().describe("Font size. Default: 20"),
+                }),
+                z.object({
+                  type: z.literal("frame"),
+                  title: z.string().describe("Frame title"),
+                  x: z.number().describe("X position"),
+                  y: z.number().describe("Y position"),
+                  width: z.number().optional().describe("Width. Default: 400"),
+                  height: z.number().optional().describe("Height. Default: 300"),
+                }),
+              ])
+            )
+            .min(1)
+            .max(500)
+            .describe("Array of objects to create (max 500)"),
+        }),
+        execute: async ({ objects }) => {
+          const startZ = await allocateZIndices(objects.length);
+          const now = Date.now();
+          const results: Array<{ id: string; type: string }> = [];
+          const createPromises: Array<Promise<void>> = [];
+
+          for (let i = 0; i < objects.length; i++) {
+            const obj = objects[i];
+            const id = randomUUID();
+            const zIndex = startZ + i;
+            let data: Record<string, unknown>;
+
+            switch (obj.type) {
+              case "sticky-note": {
+                const w = obj.width ?? 200;
+                const h = obj.height ?? 200;
+                const pos = await adjustPosition(obj.x, obj.y, w, h, "sticky-note");
+                data = {
+                  type: "sticky-note",
+                  x: pos.x, y: pos.y, width: w, height: h,
+                  text: obj.text, color: obj.color ?? "#fef08a",
+                  rotation: 0, zIndex, fontSize: 16,
+                  updatedAt: now, createdBy: userId,
+                };
+                break;
+              }
+              case "rectangle": {
+                const w = obj.width ?? 200;
+                const h = obj.height ?? 150;
+                const pos = await adjustPosition(obj.x, obj.y, w, h, "rectangle");
+                data = {
+                  type: "rectangle",
+                  x: pos.x, y: pos.y, width: w, height: h,
+                  color: obj.color ?? "#3b82f6", text: obj.text ?? "",
+                  rotation: 0, zIndex, fontSize: 16,
+                  updatedAt: now, createdBy: userId,
+                };
+                break;
+              }
+              case "circle": {
+                const w = obj.width ?? 150;
+                const h = obj.height ?? 150;
+                const pos = await adjustPosition(obj.x, obj.y, w, h, "circle");
+                data = {
+                  type: "circle",
+                  x: pos.x, y: pos.y, width: w, height: h,
+                  color: obj.color ?? "#3b82f6", text: obj.text ?? "",
+                  rotation: 0, zIndex, fontSize: 16,
+                  updatedAt: now, createdBy: userId,
+                };
+                break;
+              }
+              case "text": {
+                const w = Math.max(200, obj.text.length * 12);
+                const h = 40;
+                const pos = await adjustPosition(obj.x, obj.y, w, h, "text");
+                data = {
+                  type: "text",
+                  x: pos.x, y: pos.y, width: w, height: h,
+                  text: obj.text, color: obj.color ?? "#e8eaed",
+                  rotation: 0, zIndex, fontSize: obj.fontSize ?? 20,
+                  updatedAt: now, createdBy: userId,
+                };
+                break;
+              }
+              case "frame": {
+                const w = obj.width ?? 400;
+                const h = obj.height ?? 300;
+                const pos = await adjustPosition(obj.x, obj.y, w, h, "frame");
+                data = {
+                  type: "frame",
+                  x: pos.x, y: pos.y, width: w, height: h,
+                  text: obj.title, color: "#4b5563",
+                  rotation: 0, zIndex,
+                  updatedAt: now, createdBy: userId,
+                };
+                break;
+              }
+            }
+
+            createPromises.push(firestoreCreate(idToken, boardId, id, data));
+            results.push({ id, type: obj.type });
+          }
+
+          await Promise.all(createPromises);
+          return { created: results.length, objects: results };
         },
       }),
 
@@ -529,6 +817,73 @@ IMPORTANT RULES:
           } catch {
             return { objectId, status: "error", message: "Object not found" };
           }
+        },
+      }),
+
+      batchMutate: tool({
+        description:
+          "Perform multiple mutations on existing board objects in a single operation. Supports moving, updating text, changing color, and deleting. Use this instead of calling individual mutation tools when modifying 2 or more objects.",
+        inputSchema: z.object({
+          operations: z
+            .array(
+              z.union([
+                z.object({
+                  action: z.literal("move"),
+                  objectId: z.string().describe("ID of the object to move"),
+                  x: z.number().describe("New X position"),
+                  y: z.number().describe("New Y position"),
+                }),
+                z.object({
+                  action: z.literal("updateText"),
+                  objectId: z.string().describe("ID of the object"),
+                  text: z.string().describe("New text content"),
+                }),
+                z.object({
+                  action: z.literal("changeColor"),
+                  objectId: z.string().describe("ID of the object"),
+                  color: z.string().describe("New hex color value"),
+                }),
+                z.object({
+                  action: z.literal("delete"),
+                  objectId: z.string().describe("ID of the object to delete"),
+                }),
+              ])
+            )
+            .min(1)
+            .max(500)
+            .describe("Array of mutation operations (max 500)"),
+        }),
+        execute: async ({ operations }) => {
+          const now = Date.now();
+          const results = await Promise.all(
+            operations.map(async (op) => {
+              try {
+                switch (op.action) {
+                  case "move":
+                    await firestoreUpdate(idToken, boardId, op.objectId, {
+                      x: op.x, y: op.y, updatedAt: now,
+                    });
+                    return { objectId: op.objectId, action: "moved", status: "ok" };
+                  case "updateText":
+                    await firestoreUpdate(idToken, boardId, op.objectId, {
+                      text: op.text, updatedAt: now,
+                    });
+                    return { objectId: op.objectId, action: "textUpdated", status: "ok" };
+                  case "changeColor":
+                    await firestoreUpdate(idToken, boardId, op.objectId, {
+                      color: op.color, updatedAt: now,
+                    });
+                    return { objectId: op.objectId, action: "colorChanged", status: "ok" };
+                  case "delete":
+                    await firestoreDelete(idToken, boardId, op.objectId);
+                    return { objectId: op.objectId, action: "deleted", status: "ok" };
+                }
+              } catch {
+                return { objectId: op.objectId, action: op.action, status: "error", message: "Object not found" };
+              }
+            })
+          );
+          return { processed: results.length, results };
         },
       }),
     },
