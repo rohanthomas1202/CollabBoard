@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
-import { Stage, Layer } from "react-konva";
+import { Stage, Layer, Transformer } from "react-konva";
 import { KonvaEventObject } from "konva/lib/Node";
 import Konva from "konva";
 import { BoardObject, Tool, COLORS, DEFAULT_DIMENSIONS } from "@/lib/types";
@@ -13,6 +13,7 @@ import TextElement from "./TextElement";
 import Frame from "./Frame";
 import Connector from "./Connector";
 import Cursors from "./Cursors";
+import LineEndpoints from "./LineEndpoints";
 
 interface BoardCanvasProps {
   objects: BoardObject[];
@@ -26,6 +27,7 @@ interface BoardCanvasProps {
   onCursorMove: (x: number, y: number) => void;
   onToolChange: (tool: Tool) => void;
   onThumbnailCapture?: (dataUrl: string, force?: boolean) => void;
+  onSelectionChange?: (id: string | null) => void;
 }
 
 interface EditState {
@@ -52,8 +54,11 @@ export default function BoardCanvas({
   onCursorMove,
   onToolChange,
   onThumbnailCapture,
+  onSelectionChange,
 }: BoardCanvasProps) {
   const stageRef = useRef<Konva.Stage>(null);
+  const layerRef = useRef<Konva.Layer>(null);
+  const transformerRef = useRef<Konva.Transformer>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastDragUpdate = useRef<number>(0);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
@@ -142,6 +147,44 @@ export default function BoardCanvas({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedId, editState, onDeleteObject, onToolChange]);
+
+  // Report selection changes to parent
+  useEffect(() => {
+    onSelectionChange?.(selectedId);
+  }, [selectedId, onSelectionChange]);
+
+  // Clear selection when selected object is removed (deleted by any source)
+  useEffect(() => {
+    if (selectedId && !objects.find((o) => o.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [selectedId, objects]);
+
+  // Attach/detach Transformer when selection changes
+  useEffect(() => {
+    const transformer = transformerRef.current;
+    const layer = layerRef.current;
+    if (!transformer || !layer) return;
+
+    if (!selectedId) {
+      transformer.nodes([]);
+      return;
+    }
+
+    // Lines and connectors use custom handles, not Transformer
+    const selectedObj = objects.find((o) => o.id === selectedId);
+    if (!selectedObj || selectedObj.type === "line" || selectedObj.type === "connector") {
+      transformer.nodes([]);
+      return;
+    }
+
+    const node = layer.findOne("." + selectedId);
+    if (node) {
+      transformer.nodes([node]);
+    } else {
+      transformer.nodes([]);
+    }
+  }, [selectedId, objects]);
 
   // Clear connector source when switching away from connector tool
   useEffect(() => {
@@ -301,6 +344,25 @@ export default function BoardCanvas({
     [activeTool, getWorldPointer, objects, userId, onAddObject, onToolChange, connectorFrom, getObjectIdFromTarget]
   );
 
+  // Handle transform end: bake scale into dimensions, reset scale
+  const handleTransformEnd = useCallback(
+    (objId: string, obj: BoardObject, e: KonvaEventObject<Event>) => {
+      const node = e.target;
+      const scaleX = node.scaleX();
+      const scaleY = node.scaleY();
+      node.scaleX(1);
+      node.scaleY(1);
+      onUpdateObject(objId, {
+        x: node.x(),
+        y: node.y(),
+        width: Math.max(20, obj.width * scaleX),
+        height: Math.max(20, obj.height * scaleY),
+        rotation: node.rotation(),
+      });
+    },
+    [onUpdateObject]
+  );
+
   // Throttled drag move: broadcast position during drag at ~60ms intervals
   const handleObjectDragMove = useCallback(
     (id: string, x: number, y: number) => {
@@ -367,6 +429,9 @@ export default function BoardCanvas({
       draggable: isDraggable,
     };
 
+    const transformEnd = (e: KonvaEventObject<Event>) =>
+      handleTransformEnd(obj.id, obj, e);
+
     switch (obj.type) {
       case "sticky-note":
         return (
@@ -374,6 +439,7 @@ export default function BoardCanvas({
             key={obj.id}
             obj={isEditing ? { ...obj, text: "" } : obj}
             {...commonProps}
+            onTransformEnd={transformEnd}
             onSelect={() => {
               setSelectedId(obj.id);
               // Single-click on sticky note: start editing immediately
@@ -390,6 +456,7 @@ export default function BoardCanvas({
             key={obj.id}
             obj={isEditing ? { ...obj, text: "" } : obj}
             {...commonProps}
+            onTransformEnd={transformEnd}
             onDblClick={() => handleEditText(obj)}
           />
         );
@@ -401,6 +468,7 @@ export default function BoardCanvas({
             key={obj.id}
             obj={isEditing ? { ...obj, text: "" } : obj}
             {...commonProps}
+            onTransformEnd={transformEnd}
             onDblClick={() => handleEditText(obj)}
           />
         );
@@ -410,6 +478,7 @@ export default function BoardCanvas({
             key={obj.id}
             obj={obj}
             {...commonProps}
+            onTransformEnd={transformEnd}
             onDblClick={() => handleEditText(obj)}
           />
         );
@@ -499,14 +568,83 @@ export default function BoardCanvas({
         onDragEnd={handleDragEnd}
         style={{ backgroundColor: bgColor, cursor: activeTool === "pan" ? "grab" : "crosshair" }}
       >
-        <Layer>
+        <Layer ref={layerRef}>
           {objects.map(renderObject)}
+          {/* Line endpoint handles for selected line */}
+          {selectedId && objects.find((o) => o.id === selectedId && o.type === "line") && (
+            <LineEndpoints
+              obj={objects.find((o) => o.id === selectedId)!}
+              onUpdate={(updates) => onUpdateObject(selectedId, updates)}
+            />
+          )}
+          <Transformer
+            ref={transformerRef}
+            rotateEnabled={true}
+            enabledAnchors={[
+              "top-left", "top-right", "bottom-left", "bottom-right",
+              "middle-left", "middle-right", "top-center", "bottom-center",
+            ]}
+            boundBoxFunc={(_oldBox, newBox) => {
+              if (newBox.width < 20 || newBox.height < 20) return _oldBox;
+              return newBox;
+            }}
+          />
         </Layer>
         <Layer listening={false}>
           <Cursors cursors={cursors} />
         </Layer>
       </Stage>
       {renderTextEditor()}
+      {/* Floating delete button on selected object */}
+      {selectedId &&
+        activeTool === "select" &&
+        (() => {
+          const selectedObj = objects.find((o) => o.id === selectedId);
+          if (!selectedObj || selectedObj.type === "connector") return null;
+          const screenPos = getScreenPos(
+            selectedObj.x + selectedObj.width,
+            selectedObj.y
+          );
+          return (
+            <button
+              onClick={() => {
+                onDeleteObject(selectedId);
+                setSelectedId(null);
+              }}
+              style={{
+                position: "absolute",
+                left: screenPos.x + 4,
+                top: screenPos.y - 36,
+                width: 28,
+                height: 28,
+                borderRadius: "50%",
+                background: "#ef4444",
+                border: "2px solid #ffffff",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                zIndex: 1000,
+              }}
+              title="Delete object"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#ffffff"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+          );
+        })()}
       {activeTool === "connector" && (
         <div
           style={{

@@ -10,6 +10,7 @@ interface StickyNoteProps {
   onSelect: () => void;
   onDragEnd: (x: number, y: number) => void;
   onDragMove?: (x: number, y: number) => void;
+  onTransformEnd?: (e: KonvaEventObject<Event>) => void;
   draggable: boolean;
 }
 
@@ -19,6 +20,7 @@ export default function StickyNote({
   onSelect,
   onDragEnd,
   onDragMove,
+  onTransformEnd,
   draggable,
 }: StickyNoteProps) {
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
@@ -39,6 +41,7 @@ export default function StickyNote({
       onTap={onSelect}
       onDragEnd={handleDragEnd}
       onDragMove={handleDragMove}
+      onTransformEnd={onTransformEnd}
       rotation={obj.rotation}
     >
       {/* Shadow */}

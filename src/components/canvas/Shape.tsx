@@ -11,6 +11,7 @@ interface ShapeProps {
   onDragEnd: (x: number, y: number) => void;
   onDragMove?: (x: number, y: number) => void;
   onDblClick?: () => void;
+  onTransformEnd?: (e: KonvaEventObject<Event>) => void;
   draggable: boolean;
 }
 
@@ -21,6 +22,7 @@ export default function Shape({
   onDragEnd,
   onDragMove,
   onDblClick,
+  onTransformEnd,
   draggable,
 }: ShapeProps) {
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
@@ -84,6 +86,7 @@ export default function Shape({
       onDblTap={onDblClick}
       onDragEnd={handleDragEnd}
       onDragMove={handleDragMove}
+      onTransformEnd={onTransformEnd}
       rotation={obj.rotation}
     >
       {renderShape()}

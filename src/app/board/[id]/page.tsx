@@ -11,6 +11,7 @@ import { usePresence } from "@/hooks/usePresence";
 import AuthGuard from "@/components/ui/AuthGuard";
 import Toolbar from "@/components/toolbar/Toolbar";
 import PresenceBar from "@/components/ui/PresenceBar";
+import AIChatPanel from "@/components/ui/AIChatPanel";
 import { Tool } from "@/lib/types";
 
 const BoardCanvas = dynamic(() => import("@/components/canvas/Board"), {
@@ -37,8 +38,10 @@ function BoardPageInner() {
     user?.displayName || user?.email || "Anonymous"
   );
   const [activeTool, setActiveTool] = useState<Tool>("select");
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [boardName, setBoardName] = useState("Untitled Board");
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
   const lastThumbnailSave = useRef<number>(0);
 
   const handleThumbnailCapture = useCallback(
@@ -171,6 +174,31 @@ function BoardPageInner() {
             )}
           </button>
 
+          {/* AI Assistant toggle */}
+          <button
+            onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer"
+            style={{
+              background: isAIPanelOpen
+                ? "linear-gradient(135deg, #4f7df9, #3b6ce8)"
+                : (isDarkMode ? "#242836" : "#f0f0f2"),
+              color: isAIPanelOpen ? "#ffffff" : (isDarkMode ? "#8b8fa3" : "#6b7280"),
+              border: `1px solid ${isAIPanelOpen ? "#4f7df9" : (isDarkMode ? "#2a2e3d" : "#e2e4e8")}`,
+            }}
+            onMouseEnter={(e) => {
+              if (!isAIPanelOpen) e.currentTarget.style.borderColor = isDarkMode ? "#3d4258" : "#d1d5db";
+            }}
+            onMouseLeave={(e) => {
+              if (!isAIPanelOpen) e.currentTarget.style.borderColor = isDarkMode ? "#2a2e3d" : "#e2e4e8";
+            }}
+            title="AI Assistant"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              <path d="M12 7v4M10 9h4" />
+            </svg>
+          </button>
+
           <button
             onClick={logout}
             className="text-sm px-2.5 py-1.5 rounded-lg transition-all duration-200 cursor-pointer"
@@ -196,15 +224,27 @@ function BoardPageInner() {
         onCursorMove={updateCursor}
         onToolChange={handleToolChange}
         onThumbnailCapture={handleThumbnailCapture}
+        onSelectionChange={setSelectedObjectId}
       />
 
       {/* Toolbar */}
-      <Toolbar activeTool={activeTool} onToolChange={handleToolChange} />
+      <Toolbar
+        activeTool={activeTool}
+        onToolChange={handleToolChange}
+        hasSelection={!!selectedObjectId}
+        onDeleteSelected={() => {
+          if (selectedObjectId) {
+            deleteObject(selectedObjectId);
+            setSelectedObjectId(null);
+          }
+        }}
+      />
 
       {/* Zoom indicator */}
       <div
-        className="absolute bottom-6 right-6 text-xs px-3 py-1.5 rounded-lg z-50"
+        className="absolute bottom-6 text-xs px-3 py-1.5 rounded-lg z-30 transition-all duration-200"
         style={{
+          right: isAIPanelOpen ? 396 : 24,
           background: isDarkMode ? "rgba(26, 29, 39, 0.8)" : "rgba(255, 255, 255, 0.8)",
           backdropFilter: "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
@@ -214,6 +254,15 @@ function BoardPageInner() {
       >
         Scroll to zoom | Space+drag to pan
       </div>
+
+      {/* AI Chat Panel */}
+      <AIChatPanel
+        boardId={boardId}
+        userId={user?.uid || ""}
+        isOpen={isAIPanelOpen}
+        onClose={() => setIsAIPanelOpen(false)}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }

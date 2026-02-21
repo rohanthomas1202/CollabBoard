@@ -8,6 +8,8 @@ interface ToolbarProps {
   onToolChange: (tool: Tool) => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  onDeleteSelected?: () => void;
+  hasSelection?: boolean;
 }
 
 const toolGroups: { id: Tool; label: string; icon: React.ReactNode }[][] = [
@@ -99,7 +101,7 @@ const toolGroups: { id: Tool; label: string; icon: React.ReactNode }[][] = [
   ],
 ];
 
-export default function Toolbar({ activeTool, onToolChange }: ToolbarProps) {
+export default function Toolbar({ activeTool, onToolChange, onDeleteSelected, hasSelection }: ToolbarProps) {
   return (
     <div
       className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-2xl px-2 py-2 flex items-center gap-0.5 z-50"
@@ -147,6 +149,36 @@ export default function Toolbar({ activeTool, onToolChange }: ToolbarProps) {
           ))}
         </div>
       ))}
+      {/* Delete button */}
+      <div className="flex items-center gap-0.5">
+        <div className="w-px h-7 mx-1" style={{ background: "#2a2e3d" }} />
+        <button
+          onClick={() => onDeleteSelected?.()}
+          className="flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-200 cursor-pointer"
+          style={{
+            background: "transparent",
+            color: hasSelection ? "#ef4444" : "#4a4d5e",
+            opacity: hasSelection ? 1 : 0.5,
+          }}
+          onMouseEnter={(e) => {
+            if (hasSelection) {
+              e.currentTarget.style.background = "#3b1c1c";
+              e.currentTarget.style.color = "#f87171";
+            }
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = hasSelection ? "#ef4444" : "#4a4d5e";
+          }}
+          title="Delete selected (Del)"
+          disabled={!hasSelection}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

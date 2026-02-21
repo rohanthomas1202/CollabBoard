@@ -11,6 +11,7 @@ interface TextElementProps {
   onDragEnd: (x: number, y: number) => void;
   onDragMove?: (x: number, y: number) => void;
   onDblClick: () => void;
+  onTransformEnd?: (e: KonvaEventObject<Event>) => void;
   draggable: boolean;
 }
 
@@ -21,6 +22,7 @@ export default function TextElement({
   onDragEnd,
   onDragMove,
   onDblClick,
+  onTransformEnd,
   draggable,
 }: TextElementProps) {
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
@@ -43,6 +45,8 @@ export default function TextElement({
       onDblTap={onDblClick}
       onDragEnd={handleDragEnd}
       onDragMove={handleDragMove}
+      onTransformEnd={onTransformEnd}
+      rotation={obj.rotation}
     >
       {isSelected && (
         <Rect

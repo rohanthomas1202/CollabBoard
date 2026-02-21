@@ -11,6 +11,7 @@ interface FrameProps {
   onDragEnd: (x: number, y: number) => void;
   onDragMove?: (x: number, y: number) => void;
   onDblClick: () => void;
+  onTransformEnd?: (e: KonvaEventObject<Event>) => void;
   draggable: boolean;
 }
 
@@ -21,6 +22,7 @@ export default function Frame({
   onDragEnd,
   onDragMove,
   onDblClick,
+  onTransformEnd,
   draggable,
 }: FrameProps) {
   const handleDragEnd = (e: KonvaEventObject<DragEvent>) => {
@@ -43,6 +45,8 @@ export default function Frame({
       onDblTap={onDblClick}
       onDragEnd={handleDragEnd}
       onDragMove={handleDragMove}
+      onTransformEnd={onTransformEnd}
+      rotation={obj.rotation}
     >
       {/* Frame title */}
       <Text
