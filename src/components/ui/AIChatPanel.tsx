@@ -107,7 +107,7 @@ export default function AIChatPanel({
     [boardId, userId, customFetch]
   );
 
-  const { messages, sendMessage, setMessages, status, error, clearError } =
+  const { messages, sendMessage, setMessages, status, error, clearError, stop } =
     useChat({ transport });
 
   // --- Firestore chat persistence ---
@@ -681,7 +681,11 @@ export default function AIChatPanel({
           const form = e.target as HTMLFormElement;
           const input = form.elements.namedItem("message") as HTMLInputElement;
           const value = input.value.trim();
-          if (value && !isLoading) {
+          if (isLoading) {
+            stop();
+            return;
+          }
+          if (value) {
             sendMessage({ text: value });
             input.value = "";
           }
@@ -712,28 +716,49 @@ export default function AIChatPanel({
                 : "#e2e4e8";
             }}
           />
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-3 py-2 rounded-xl text-sm font-medium text-white transition-opacity duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: "linear-gradient(135deg, #4f7df9, #3b6ce8)",
-            }}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {isLoading ? (
+            <button
+              type="button"
+              onClick={stop}
+              className="px-3 py-2 rounded-xl text-sm font-medium text-white transition-all duration-150 cursor-pointer"
+              style={{
+                background: "#ef4444",
+              }}
+              title="Stop generating"
             >
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                stroke="none"
+              >
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="px-3 py-2 rounded-xl text-sm font-medium text-white transition-opacity duration-150 cursor-pointer"
+              style={{
+                background: "linear-gradient(135deg, #4f7df9, #3b6ce8)",
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          )}
         </div>
       </form>
     </div>
