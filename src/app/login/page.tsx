@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "next/navigation";
 
 const themes = {
@@ -51,7 +52,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState("");
-  const [isDark, setIsDark] = useState(true);
+  const { isDark, toggleTheme } = useTheme();
   const { loginWithEmail, signupWithEmail, loginWithGoogle, user } = useAuth();
   const router = useRouter();
 
@@ -100,7 +101,7 @@ export default function LoginPage() {
 
       {/* Theme toggle */}
       <button
-        onClick={() => setIsDark(!isDark)}
+        onClick={toggleTheme}
         className="fixed top-4 right-4 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer z-20"
         style={{ background: t.toggleBg, border: `1px solid ${t.toggleBorder}`, color: t.toggleColor }}
         title={isDark ? "Switch to light" : "Switch to dark"}

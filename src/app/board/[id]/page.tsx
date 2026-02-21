@@ -8,6 +8,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { useBoard } from "@/hooks/useBoard";
 import { usePresence } from "@/hooks/usePresence";
+import { useTheme } from "@/hooks/useTheme";
 import AuthGuard from "@/components/ui/AuthGuard";
 import Toolbar from "@/components/toolbar/Toolbar";
 import PresenceBar from "@/components/ui/PresenceBar";
@@ -40,7 +41,7 @@ function BoardPageInner() {
   const [activeTool, setActiveTool] = useState<Tool>("select");
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [boardName, setBoardName] = useState("Untitled Board");
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const { isDark: isDarkMode, toggleTheme } = useTheme();
   const [isAIPanelOpen, setIsAIPanelOpen] = useState(false);
   const lastThumbnailSave = useRef<number>(0);
 
@@ -144,7 +145,7 @@ function BoardPageInner() {
         <div className="flex items-center gap-2">
           {/* Theme toggle */}
           <button
-            onClick={() => setIsDarkMode(!isDarkMode)}
+            onClick={toggleTheme}
             className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer"
             style={{
               background: isDarkMode ? "#242836" : "#f0f0f2",

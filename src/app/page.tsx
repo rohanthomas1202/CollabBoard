@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/hooks/useTheme";
 import { Board } from "@/lib/types";
 
 type Tab = "all" | "my" | "shared";
@@ -66,7 +67,7 @@ export default function DashboardPage() {
   const [boardsLoading, setBoardsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [isDark, setIsDark] = useState(true);
+  const { isDark, toggleTheme } = useTheme();
 
   const t = isDark ? themes.dark : themes.light;
 
@@ -181,7 +182,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-3">
             {/* Theme toggle */}
             <button
-              onClick={() => setIsDark(!isDark)}
+              onClick={toggleTheme}
               className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer"
               style={{ background: t.toggleBg, border: `1px solid ${t.toggleBorder}`, color: t.toggleColor }}
               title={isDark ? "Switch to light" : "Switch to dark"}
