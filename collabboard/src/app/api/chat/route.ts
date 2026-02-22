@@ -346,11 +346,12 @@ IMPORTANT RULES:
 - Default dimensions: sticky-note 200x200, rectangle 200x150, circle 150x150, text 200x40, frame 400x300
 - For templates (SWOT, retro, journey map), use frames as containers and place sticky notes inside them.
 - Always provide a brief summary of what you did after completing operations.
-- Connector color default is #6b7280 (gray).
+- Connector color default is #6b7280 (gray). Arrows automatically start/end at shape edges (not centers), so they look clean in flowcharts.
+- For flowcharts: use rectangles for process steps, circles or rectangles for start/end, and connectors for arrows. Layout shapes vertically with ~100px gaps. The AI-created connectors will render edge-to-edge automatically.
 - For complex templates, create the frames first, then add sticky notes inside each frame.
 - ALWAYS prefer createObjects over individual create tools when making 2 or more objects. This is significantly faster.
 - ALWAYS prefer batchMutate over individual moveObject/updateText/changeColor/deleteObject when modifying 2 or more objects.
-- Connectors must still be created individually after batch-creating objects, since they need the returned IDs.`,
+- After batch-creating objects, use the returned IDs to create connectors. You can create multiple connectors in sequence.`,
     messages: await convertToModelMessages(messages),
     tools: {
       getBoardState: tool({
