@@ -139,7 +139,8 @@ async function firestoreCreate(
   token: string,
   boardId: string,
   docId: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  signal?: AbortSignal
 ) {
   const url = `${FIRESTORE_BASE}/boards/${boardId}/objects?documentId=${encodeURIComponent(docId)}`;
   const res = await fetch(url, {
@@ -149,6 +150,7 @@ async function firestoreCreate(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ fields: toFirestoreFields(data) }),
+    signal,
   });
   if (!res.ok) {
     const text = await res.text();
@@ -160,7 +162,8 @@ async function firestoreUpdate(
   token: string,
   boardId: string,
   docId: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  signal?: AbortSignal
 ) {
   const fieldPaths = Object.keys(data)
     .map((k) => `updateMask.fieldPaths=${encodeURIComponent(k)}`)
@@ -173,6 +176,7 @@ async function firestoreUpdate(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ fields: toFirestoreFields(data) }),
+    signal,
   });
   if (!res.ok) {
     const text = await res.text();
@@ -183,7 +187,8 @@ async function firestoreUpdate(
 async function firestoreDelete(
   token: string,
   boardId: string,
-  docId: string
+  docId: string,
+  signal?: AbortSignal
 ) {
   const url = `${FIRESTORE_BASE}/boards/${boardId}/objects/${encodeURIComponent(docId)}`;
   const res = await fetch(url, {
@@ -191,6 +196,7 @@ async function firestoreDelete(
     headers: {
       Authorization: `Bearer ${token}`,
     },
+    signal,
   });
   if (!res.ok) {
     const text = await res.text();
@@ -198,13 +204,14 @@ async function firestoreDelete(
   }
 }
 
-async function firestoreList(token: string, boardId: string) {
+async function firestoreList(token: string, boardId: string, signal?: AbortSignal) {
   const url = `${FIRESTORE_BASE}/boards/${boardId}/objects?pageSize=500`;
   const res = await fetch(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,
     },
+    signal,
   });
   if (!res.ok) {
     const text = await res.text();
@@ -245,6 +252,8 @@ export async function POST(req: Request) {
     return new Response("Missing authentication token", { status: 401 });
   }
 
+  const signal = req.signal;
+
   // Per-request caches — single firestoreList call shared by zIndex and overlap
   let cachedObjects: Array<Record<string, unknown>> | null = null;
   let cachedMaxZIndex: number | null = null;
@@ -256,7 +265,8 @@ export async function POST(req: Request) {
     if (cachedObjects !== null) return cachedObjects;
     cachedObjects = (await firestoreList(
       idToken,
-      boardId
+      boardId,
+      signal
     )) as Array<Record<string, unknown>>;
     return cachedObjects;
   }
@@ -323,6 +333,7 @@ export async function POST(req: Request) {
   }
 
   const result = streamText({
+    abortSignal: req.signal,
     model: anthropic("claude-sonnet-4-20250514"),
     system: `You are an AI board assistant for CollabBoard, a collaborative whiteboard app.
 You help users create, arrange, and manipulate objects on their whiteboard.
@@ -335,11 +346,31 @@ IMPORTANT RULES:
 - Default dimensions: sticky-note 200x200, rectangle 200x150, circle 150x150, text 200x40, frame 400x300
 - For templates (SWOT, retro, journey map), use frames as containers and place sticky notes inside them.
 - Always provide a brief summary of what you did after completing operations.
-- Connector color default is #6b7280 (gray).
+- Connector color default is #6b7280 (gray). Arrows automatically start/end at shape edges (not centers), so they look clean in flowcharts.
+- For flowcharts: use rectangles for process steps, circles or rectangles for start/end, and connectors for arrows. Layout shapes vertically with ~100px gaps. The AI-created connectors will render edge-to-edge automatically.
 - For complex templates, create the frames first, then add sticky notes inside each frame.
 - ALWAYS prefer createObjects over individual create tools when making 2 or more objects. This is significantly faster.
 - ALWAYS prefer batchMutate over individual moveObject/updateText/changeColor/deleteObject when modifying 2 or more objects.
-- Connectors must still be created individually after batch-creating objects, since they need the returned IDs.`,
+- After batch-creating objects, use the returned IDs to create connectors. You can create multiple connectors in sequence.
+
+PLACE INSIDE FRAMES:
+When the user asks you to add objects (sticky notes, shapes, text, etc.) and you are NOT creating a brand-new template/framework:
+1. FIRST call getBoardState({ objectTypes: ["frame"] }) to check for existing frames on the board.
+2. If one or more frames exist, place the new objects INSIDE the most appropriate frame. Position them within the frame's bounds (frame.x + 20 to frame.x + frame.width - 220 for x, frame.y + 50 to frame.y + frame.height - 220 for y). Use 20px padding inside the frame edges and arrange objects in a grid layout within the frame.
+3. If there is only one frame, always place objects inside it.
+4. If there are multiple frames, choose the most thematically relevant frame based on its title/label and the content being added. If no frame is clearly relevant, use the frame with the most available space.
+5. If the frame is too small to fit the new objects, resize the frame first using batchMutate with a "resize" action to make it large enough, then place the objects inside.
+6. Only skip this rule when: (a) the user explicitly asks to place objects outside frames, (b) you are creating a new template with its own frames, or (c) there are no frames on the board.
+
+ORGANIZE / CLUSTER STRATEGY:
+When the user asks to organize, cluster, group, or tidy the board:
+1. Call getBoardState({ objectTypes: ["sticky-note", "frame"] }) to get all sticky notes and existing frames.
+2. If fewer than 3 sticky notes exist, respond with a helpful message instead of organizing.
+3. Analyze sticky note text content and cluster them into 2-6 semantic themes.
+4. Use createObjects to create one labeled frame per theme. Layout frames in a grid (max 3 per row, 60px gaps between frames). Size each frame based on the number of notes inside it (width: 460px, height: 60 + noteCount * 220px for a 2-column layout).
+5. Use batchMutate with action "move" to reposition each sticky note inside its cluster frame. Arrange notes in a 2-column grid inside each frame with 10px padding and 10px gaps.
+6. Existing connectors auto-reposition when notes move — no need to update them.
+7. Delete any old empty frames if they are now unused.`,
     messages: await convertToModelMessages(messages),
     tools: {
       getBoardState: tool({
@@ -355,6 +386,7 @@ IMPORTANT RULES:
                 "text",
                 "frame",
                 "connector",
+                "freehand",
               ])
             )
             .optional()
@@ -363,7 +395,7 @@ IMPORTANT RULES:
             ),
         }),
         execute: async ({ objectTypes }) => {
-          const objects = await firestoreList(idToken, boardId);
+          const objects = await firestoreList(idToken, boardId, signal);
           const filtered = objectTypes
             ? objects.filter((o: Record<string, unknown>) =>
                 (objectTypes as string[]).includes(o.type as string)
@@ -371,16 +403,20 @@ IMPORTANT RULES:
             : objects;
           return {
             objectCount: filtered.length,
-            objects: filtered.map((o: Record<string, unknown>) => ({
-              id: o.id,
-              type: o.type,
-              x: o.x,
-              y: o.y,
-              width: o.width,
-              height: o.height,
-              text: o.text || null,
-              color: o.color,
-            })),
+            objects: filtered.map((o: Record<string, unknown>) => {
+              const base: Record<string, unknown> = {
+                id: o.id,
+                type: o.type,
+                x: o.x,
+                y: o.y,
+                width: o.width,
+                height: o.height,
+                text: o.text || null,
+                color: o.color,
+              };
+              // Exclude points field from freehand objects to avoid bloating context
+              return base;
+            }),
           };
         },
       }),
@@ -426,7 +462,7 @@ IMPORTANT RULES:
             fontSize: 16,
             updatedAt: Date.now(),
             createdBy: userId,
-          });
+          }, signal);
           return { id, status: "created" };
         },
       }),
@@ -484,7 +520,7 @@ IMPORTANT RULES:
             fontSize: 16,
             updatedAt: Date.now(),
             createdBy: userId,
-          });
+          }, signal);
           return { id, status: "created" };
         },
       }),
@@ -524,7 +560,7 @@ IMPORTANT RULES:
             fontSize: fontSize ?? 20,
             updatedAt: Date.now(),
             createdBy: userId,
-          });
+          }, signal);
           return { id, status: "created" };
         },
       }),
@@ -563,7 +599,7 @@ IMPORTANT RULES:
             zIndex,
             updatedAt: Date.now(),
             createdBy: userId,
-          });
+          }, signal);
           return { id, status: "created" };
         },
       }),
@@ -595,7 +631,7 @@ IMPORTANT RULES:
             connectedTo: toId,
             updatedAt: Date.now(),
             createdBy: userId,
-          });
+          }, signal);
           return { id, status: "created" };
         },
       }),
@@ -663,6 +699,7 @@ IMPORTANT RULES:
           const createPromises: Array<Promise<void>> = [];
 
           for (let i = 0; i < objects.length; i++) {
+            if (signal.aborted) break;
             const obj = objects[i];
             const id = randomUUID();
             const zIndex = startZ + i;
@@ -736,7 +773,7 @@ IMPORTANT RULES:
               }
             }
 
-            createPromises.push(firestoreCreate(idToken, boardId, id, data));
+            createPromises.push(firestoreCreate(idToken, boardId, id, data, signal));
             results.push({ id, type: obj.type });
           }
 
@@ -758,7 +795,7 @@ IMPORTANT RULES:
               x,
               y,
               updatedAt: Date.now(),
-            });
+            }, signal);
             return { objectId, status: "moved", x, y };
           } catch {
             return { objectId, status: "error", message: "Object not found" };
@@ -778,7 +815,7 @@ IMPORTANT RULES:
             await firestoreUpdate(idToken, boardId, objectId, {
               text,
               updatedAt: Date.now(),
-            });
+            }, signal);
             return { objectId, status: "updated" };
           } catch {
             return { objectId, status: "error", message: "Object not found" };
@@ -797,7 +834,7 @@ IMPORTANT RULES:
             await firestoreUpdate(idToken, boardId, objectId, {
               color,
               updatedAt: Date.now(),
-            });
+            }, signal);
             return { objectId, status: "color changed" };
           } catch {
             return { objectId, status: "error", message: "Object not found" };
@@ -812,7 +849,7 @@ IMPORTANT RULES:
         }),
         execute: async ({ objectId }) => {
           try {
-            await firestoreDelete(idToken, boardId, objectId);
+            await firestoreDelete(idToken, boardId, objectId, signal);
             return { objectId, status: "deleted" };
           } catch {
             return { objectId, status: "error", message: "Object not found" };
@@ -822,7 +859,7 @@ IMPORTANT RULES:
 
       batchMutate: tool({
         description:
-          "Perform multiple mutations on existing board objects in a single operation. Supports moving, updating text, changing color, and deleting. Use this instead of calling individual mutation tools when modifying 2 or more objects.",
+          "Perform multiple mutations on existing board objects in a single operation. Supports moving, resizing, updating text, changing color, and deleting. Use this instead of calling individual mutation tools when modifying 2 or more objects.",
         inputSchema: z.object({
           operations: z
             .array(
@@ -844,6 +881,12 @@ IMPORTANT RULES:
                   color: z.string().describe("New hex color value"),
                 }),
                 z.object({
+                  action: z.literal("resize"),
+                  objectId: z.string().describe("ID of the object to resize"),
+                  width: z.number().describe("New width"),
+                  height: z.number().describe("New height"),
+                }),
+                z.object({
                   action: z.literal("delete"),
                   objectId: z.string().describe("ID of the object to delete"),
                 }),
@@ -857,25 +900,31 @@ IMPORTANT RULES:
           const now = Date.now();
           const results = await Promise.all(
             operations.map(async (op) => {
+              if (signal.aborted) return { objectId: op.objectId, action: op.action, status: "aborted" };
               try {
                 switch (op.action) {
                   case "move":
                     await firestoreUpdate(idToken, boardId, op.objectId, {
                       x: op.x, y: op.y, updatedAt: now,
-                    });
+                    }, signal);
                     return { objectId: op.objectId, action: "moved", status: "ok" };
                   case "updateText":
                     await firestoreUpdate(idToken, boardId, op.objectId, {
                       text: op.text, updatedAt: now,
-                    });
+                    }, signal);
                     return { objectId: op.objectId, action: "textUpdated", status: "ok" };
                   case "changeColor":
                     await firestoreUpdate(idToken, boardId, op.objectId, {
                       color: op.color, updatedAt: now,
-                    });
+                    }, signal);
                     return { objectId: op.objectId, action: "colorChanged", status: "ok" };
+                  case "resize":
+                    await firestoreUpdate(idToken, boardId, op.objectId, {
+                      width: op.width, height: op.height, updatedAt: now,
+                    }, signal);
+                    return { objectId: op.objectId, action: "resized", status: "ok" };
                   case "delete":
-                    await firestoreDelete(idToken, boardId, op.objectId);
+                    await firestoreDelete(idToken, boardId, op.objectId, signal);
                     return { objectId: op.objectId, action: "deleted", status: "ok" };
                 }
               } catch {

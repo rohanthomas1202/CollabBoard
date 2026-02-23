@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useMemo, useCallback, useState } from "react";
 import { useChat } from "@ai-sdk/react";
+import { BOARD_TEMPLATES } from "@/lib/templates";
 import { DefaultChatTransport } from "ai";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
@@ -59,6 +60,9 @@ export default function AIChatPanel({
   const [showHistory, setShowHistory] = useState(false);
   const prevStatusRef = useRef<string>("");
 
+  // Suppress isDarkMode unused warning — kept for API compatibility; theme is now CSS-driven
+  void isDarkMode;
+
   // Get Firebase ID token for server-side Firestore access
   useEffect(() => {
     if (!auth) return;
@@ -82,7 +86,6 @@ export default function AIChatPanel({
     };
   }, []);
 
-  // Custom fetch injects the Firebase ID token as a header on every request.
   const customFetch = useCallback(
     async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       try {
@@ -145,7 +148,6 @@ export default function AIChatPanel({
       );
       const title = titlePart?.text?.slice(0, 60) || "Chat";
 
-      // Check if document already exists to preserve createdAt
       const docRef = doc(chatsCollection, chatId);
       const existing = await getDoc(docRef).catch(() => null);
       const createdAt = existing?.exists()
@@ -165,7 +167,6 @@ export default function AIChatPanel({
 
   const loadChat = useCallback(
     async (chatId: string) => {
-      // Save current chat first
       if (
         activeChatIdRef.current &&
         activeChatIdRef.current !== chatId &&
@@ -173,7 +174,6 @@ export default function AIChatPanel({
       ) {
         await saveChat(activeChatIdRef.current, messages);
       }
-      // Load selected chat
       try {
         const snap = await getDoc(doc(chatsCollection, chatId));
         if (snap.exists()) {
@@ -190,7 +190,6 @@ export default function AIChatPanel({
   );
 
   const startNewChat = useCallback(async () => {
-    // Save current chat if it has messages
     if (activeChatIdRef.current && messages.length > 0) {
       await saveChat(activeChatIdRef.current, messages);
     }
@@ -207,7 +206,6 @@ export default function AIChatPanel({
       try {
         await deleteDoc(doc(chatsCollection, chatId));
         setChatList((prev) => prev.filter((c) => c.id !== chatId));
-        // If we deleted the active chat, clear it
         if (activeChatIdRef.current === chatId) {
           setMessages([]);
           activeChatIdRef.current = null;
@@ -218,12 +216,10 @@ export default function AIChatPanel({
     [chatsCollection, setMessages]
   );
 
-  // Load chat list on mount
   useEffect(() => {
     loadChatList();
   }, [loadChatList]);
 
-  // Auto-save when assistant finishes responding
   useEffect(() => {
     const wasActive =
       prevStatusRef.current === "streaming" ||
@@ -231,7 +227,6 @@ export default function AIChatPanel({
     prevStatusRef.current = status;
 
     if (wasActive && status === "ready" && messages.length > 0) {
-      // Generate a chat ID if we don't have one yet
       if (!activeChatIdRef.current) {
         const newId = doc(chatsCollection).id;
         activeChatIdRef.current = newId;
@@ -241,7 +236,6 @@ export default function AIChatPanel({
     }
   }, [status, messages, saveChat, loadChatList, chatsCollection]);
 
-  // Auto-scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -255,69 +249,49 @@ export default function AIChatPanel({
       className="fixed top-12 right-0 bottom-0 z-40 flex flex-col"
       style={{
         width: 380,
-        background: isDarkMode
-          ? "rgba(26, 29, 39, 0.95)"
-          : "rgba(255, 255, 255, 0.95)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-        borderLeft: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
+        background: "var(--bg-surface)",
+        borderLeft: "1px solid var(--border-subtle)",
       }}
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between px-4 py-3"
+        className="flex items-center justify-between px-4"
         style={{
-          borderBottom: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
+          height: 48,
+          borderBottom: "1px solid var(--border-subtle)",
         }}
       >
         <div className="flex items-center gap-2">
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#4f7df9"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
           </svg>
-          <span
-            className="text-sm font-medium"
-            style={{ color: isDarkMode ? "#e8eaed" : "#1f2937" }}
-          >
+          <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
             AI Assistant
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {/* New chat button */}
           <button
             onClick={startNewChat}
-            className="w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150 cursor-pointer"
-            style={{ color: isDarkMode ? "#5c6070" : "#9ca3af" }}
+            className="w-7 h-7 flex items-center justify-center cursor-pointer"
+            style={{
+              color: "var(--text-tertiary)",
+              background: "transparent",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              transition: "all var(--duration-fast) var(--ease-out)",
+            }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = "#4f7df9";
-              e.currentTarget.style.background = isDarkMode
-                ? "#242836"
-                : "#f0f0f2";
+              e.currentTarget.style.color = "var(--accent)";
+              e.currentTarget.style.background = "var(--bg-surface-hover)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = isDarkMode ? "#5c6070" : "#9ca3af";
+              e.currentTarget.style.color = "var(--text-tertiary)";
               e.currentTarget.style.background = "transparent";
             }}
             title="New chat"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
@@ -328,45 +302,27 @@ export default function AIChatPanel({
               setShowHistory(!showHistory);
               if (!showHistory) loadChatList();
             }}
-            className="w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150 cursor-pointer"
+            className="w-7 h-7 flex items-center justify-center cursor-pointer"
             style={{
-              color: showHistory
-                ? "#4f7df9"
-                : isDarkMode
-                  ? "#5c6070"
-                  : "#9ca3af",
-              background: showHistory
-                ? isDarkMode
-                  ? "#242836"
-                  : "#f0f0f2"
-                : "transparent",
+              color: showHistory ? "var(--accent)" : "var(--text-tertiary)",
+              background: showHistory ? "var(--bg-surface-hover)" : "transparent",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              transition: "all var(--duration-fast) var(--ease-out)",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = "#4f7df9";
-              e.currentTarget.style.background = isDarkMode
-                ? "#242836"
-                : "#f0f0f2";
+              e.currentTarget.style.color = "var(--accent)";
+              e.currentTarget.style.background = "var(--bg-surface-hover)";
             }}
             onMouseLeave={(e) => {
               if (!showHistory) {
-                e.currentTarget.style.color = isDarkMode
-                  ? "#5c6070"
-                  : "#9ca3af";
+                e.currentTarget.style.color = "var(--text-tertiary)";
                 e.currentTarget.style.background = "transparent";
               }
             }}
             title="Chat history"
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
             </svg>
@@ -374,25 +330,22 @@ export default function AIChatPanel({
           {/* Close */}
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-150 cursor-pointer"
-            style={{ color: isDarkMode ? "#5c6070" : "#9ca3af" }}
+            className="w-7 h-7 flex items-center justify-center cursor-pointer"
+            style={{
+              color: "var(--text-tertiary)",
+              background: "transparent",
+              border: "none",
+              borderRadius: "var(--radius-sm)",
+              transition: "all var(--duration-fast) var(--ease-out)",
+            }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.color = isDarkMode ? "#e8eaed" : "#1f2937";
+              e.currentTarget.style.color = "var(--text-primary)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.color = isDarkMode ? "#5c6070" : "#9ca3af";
+              e.currentTarget.style.color = "var(--text-tertiary)";
             }}
           >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -406,14 +359,12 @@ export default function AIChatPanel({
           className="overflow-y-auto"
           style={{
             maxHeight: 260,
-            borderBottom: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
+            borderBottom: "1px solid var(--border-subtle)",
+            background: "var(--bg-elevated)",
           }}
         >
           {chatList.length === 0 ? (
-            <div
-              className="px-4 py-6 text-center text-xs"
-              style={{ color: isDarkMode ? "#5c6070" : "#9ca3af" }}
-            >
+            <div className="px-4 py-6 text-center text-xs" style={{ color: "var(--text-tertiary)" }}>
               No chat history yet
             </div>
           ) : (
@@ -421,64 +372,44 @@ export default function AIChatPanel({
               <button
                 key={chat.id}
                 onClick={() => loadChat(chat.id)}
-                className="w-full text-left px-4 py-2.5 flex items-center justify-between group transition-colors duration-100 cursor-pointer"
+                className="w-full text-left px-4 py-2.5 flex items-center justify-between group cursor-pointer"
                 style={{
-                  background:
-                    activeChatId === chat.id
-                      ? isDarkMode
-                        ? "#242836"
-                        : "#f0f0f2"
-                      : "transparent",
+                  background: activeChatId === chat.id ? "var(--accent-muted)" : "transparent",
+                  border: "none",
+                  borderBottom: "1px solid var(--border-subtle)",
+                  transition: "background var(--duration-fast) var(--ease-out)",
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = isDarkMode
-                    ? "#242836"
-                    : "#f0f0f2";
+                  e.currentTarget.style.background = "var(--bg-surface-hover)";
                 }}
                 onMouseLeave={(e) => {
-                  if (activeChatId !== chat.id) {
-                    e.currentTarget.style.background = "transparent";
-                  }
+                  e.currentTarget.style.background =
+                    activeChatId === chat.id ? "var(--accent-muted)" : "transparent";
                 }}
               >
                 <div className="flex-1 min-w-0 mr-2">
-                  <p
-                    className="text-xs truncate"
-                    style={{
-                      color: isDarkMode ? "#e8eaed" : "#1f2937",
-                    }}
-                  >
+                  <p className="text-xs truncate" style={{ color: "var(--text-primary)" }}>
                     {chat.title}
                   </p>
-                  <p
-                    className="text-[10px] mt-0.5"
-                    style={{ color: isDarkMode ? "#5c6070" : "#9ca3af" }}
-                  >
+                  <p className="text-[10px] mt-0.5" style={{ color: "var(--text-tertiary)" }}>
                     {timeAgo(chat.updatedAt)}
                   </p>
                 </div>
                 <button
                   onClick={(e) => deleteChatEntry(chat.id, e)}
-                  className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center transition-opacity duration-150 cursor-pointer flex-shrink-0"
-                  style={{ color: isDarkMode ? "#5c6070" : "#9ca3af" }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = "#ef4444";
+                  className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center flex-shrink-0 cursor-pointer"
+                  style={{
+                    color: "var(--text-tertiary)",
+                    background: "none",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    transition: "all var(--duration-fast) var(--ease-out)",
                   }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = isDarkMode
-                      ? "#5c6070"
-                      : "#9ca3af";
-                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "var(--error)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-tertiary)"; }}
                   title="Delete chat"
                 >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <polyline points="3 6 5 6 21 6" />
                     <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
                   </svg>
@@ -494,65 +425,89 @@ export default function AIChatPanel({
         {messages.length === 0 && !showHistory && (
           <div className="text-center py-8 space-y-4">
             <div
-              className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto"
-              style={{
-                background: isDarkMode
-                  ? "rgba(79, 125, 249, 0.12)"
-                  : "rgba(79, 125, 249, 0.08)",
-              }}
+              className="w-12 h-12 flex items-center justify-center mx-auto"
+              style={{ background: "var(--accent-muted)", borderRadius: "var(--radius-lg)" }}
             >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#4f7df9"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
               </svg>
             </div>
             <div>
-              <p
-                className="text-sm font-medium mb-1"
-                style={{ color: isDarkMode ? "#e8eaed" : "#1f2937" }}
-              >
+              <p className="text-sm font-medium mb-1" style={{ color: "var(--text-primary)" }}>
                 AI Board Assistant
               </p>
-              <p
-                className="text-xs"
-                style={{ color: isDarkMode ? "#5c6070" : "#9ca3af" }}
-              >
+              <p className="text-xs" style={{ color: "var(--text-tertiary)" }}>
                 I can create, move, and arrange objects on your board.
               </p>
             </div>
-            <div className="space-y-2">
+            {/* Template cards */}
+            <div className="grid grid-cols-2 gap-2 px-1">
+              {BOARD_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  onClick={() => sendMessage({ text: tpl.prompt })}
+                  className="text-left p-3 cursor-pointer"
+                  style={{
+                    background: "var(--bg-surface-hover)",
+                    border: "1px solid var(--border-subtle)",
+                    borderLeft: `3px solid ${tpl.accentColor}`,
+                    borderRadius: "var(--radius-md)",
+                    transition: "all var(--duration-fast) var(--ease-out)",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = tpl.accentColor;
+                    e.currentTarget.style.background = "var(--bg-elevated)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "var(--border-subtle)";
+                    e.currentTarget.style.borderLeftColor = tpl.accentColor;
+                    e.currentTarget.style.background = "var(--bg-surface-hover)";
+                  }}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span
+                      className="w-6 h-6 flex items-center justify-center text-xs font-bold"
+                      style={{
+                        background: `${tpl.accentColor}20`,
+                        color: tpl.accentColor,
+                        borderRadius: "var(--radius-sm)",
+                      }}
+                    >
+                      {tpl.icon}
+                    </span>
+                    <span className="text-xs font-medium" style={{ color: "var(--text-primary)" }}>
+                      {tpl.name}
+                    </span>
+                  </div>
+                  <p className="text-[10px] leading-relaxed" style={{ color: "var(--text-tertiary)" }}>
+                    {tpl.description}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            {/* Free-form examples */}
+            <div className="space-y-1.5 mt-3 px-1">
+              <p className="text-[10px] font-medium uppercase tracking-wide" style={{ color: "var(--text-quaternary)" }}>
+                Or try
+              </p>
               {[
-                "Create a SWOT analysis template",
                 "Add a yellow sticky note that says 'Idea'",
                 "Arrange all sticky notes in a grid",
               ].map((example) => (
                 <button
                   key={example}
                   onClick={() => sendMessage({ text: example })}
-                  className="block w-full text-left text-xs px-3 py-2 rounded-lg transition-all duration-150 cursor-pointer"
+                  className="block w-full text-left text-xs px-3 py-2 cursor-pointer"
                   style={{
-                    background: isDarkMode ? "#242836" : "#f5f6f8",
-                    color: isDarkMode ? "#8b8fa3" : "#6b7280",
-                    border: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
+                    background: "var(--bg-surface-hover)",
+                    color: "var(--text-secondary)",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "var(--radius-md)",
+                    transition: "border-color var(--duration-fast) var(--ease-out)",
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode
-                      ? "#3d4258"
-                      : "#d1d5db";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = isDarkMode
-                      ? "#2a2e3d"
-                      : "#e2e4e8";
-                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = "var(--border-hover)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--border-subtle)"; }}
                 >
                   &quot;{example}&quot;
                 </button>
@@ -566,20 +521,14 @@ export default function AIChatPanel({
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
           >
             <div
-              className="max-w-[85%] px-3 py-2 rounded-xl text-sm whitespace-pre-wrap"
+              className="max-w-[85%] px-3 py-2 text-sm whitespace-pre-wrap"
               style={{
-                background:
+                background: msg.role === "user" ? "var(--accent)" : "var(--bg-surface-hover)",
+                color: msg.role === "user" ? "#ffffff" : "var(--text-primary)",
+                borderRadius:
                   msg.role === "user"
-                    ? "linear-gradient(135deg, #4f7df9, #3b6ce8)"
-                    : isDarkMode
-                      ? "#242836"
-                      : "#f0f1f3",
-                color:
-                  msg.role === "user"
-                    ? "#ffffff"
-                    : isDarkMode
-                      ? "#e8eaed"
-                      : "#1f2937",
+                    ? "var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg)"
+                    : "var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm)",
               }}
             >
               {msg.parts.map((part, i) => {
@@ -600,28 +549,20 @@ export default function AIChatPanel({
                     <div
                       key={i}
                       className="text-xs py-1 flex items-center gap-1.5"
-                      style={{
-                        color: isDarkMode
-                          ? "rgba(139, 143, 163, 0.8)"
-                          : "rgba(107, 114, 128, 0.8)",
-                      }}
+                      style={{ color: "var(--text-tertiary)" }}
                     >
                       {isRunning && (
                         <>
-                          <span className="inline-block w-3 h-3 rounded-full border border-current border-t-transparent animate-spin" />
+                          <span
+                            className="inline-block w-3 h-3 rounded-full border border-current border-t-transparent"
+                            style={{ animation: "spin 1s linear infinite" }}
+                          />
                           {toolName}...
                         </>
                       )}
                       {isDone && (
                         <>
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
                           {toolName}
@@ -629,7 +570,10 @@ export default function AIChatPanel({
                       )}
                       {!isRunning && !isDone && (
                         <>
-                          <span className="inline-block w-3 h-3 rounded-full border border-current border-t-transparent animate-spin" />
+                          <span
+                            className="inline-block w-3 h-3 rounded-full border border-current border-t-transparent"
+                            style={{ animation: "spin 1s linear infinite" }}
+                          />
                           {toolName}...
                         </>
                       )}
@@ -644,10 +588,11 @@ export default function AIChatPanel({
         {isLoading && messages[messages.length - 1]?.role === "user" && (
           <div className="flex justify-start">
             <div
-              className="px-3 py-2 rounded-xl text-sm"
+              className="px-3 py-2 text-sm"
               style={{
-                background: isDarkMode ? "#242836" : "#f0f1f3",
-                color: isDarkMode ? "#8b8fa3" : "#6b7280",
+                background: "var(--bg-surface-hover)",
+                color: "var(--text-tertiary)",
+                borderRadius: "var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm)",
               }}
             >
               <span className="inline-flex gap-1">
@@ -665,10 +610,10 @@ export default function AIChatPanel({
       {error && (
         <div
           className="px-4 py-2 text-xs flex items-center justify-between"
-          style={{ color: "#fca5a5", background: isDarkMode ? "rgba(239, 68, 68, 0.1)" : "rgba(239, 68, 68, 0.05)" }}
+          style={{ color: "var(--error)", background: "var(--error-muted)" }}
         >
           <span>Error: {error.message}</span>
-          <button onClick={clearError} className="underline cursor-pointer">
+          <button onClick={clearError} className="underline cursor-pointer" style={{ background: "none", border: "none", color: "inherit" }}>
             Dismiss
           </button>
         </div>
@@ -691,9 +636,7 @@ export default function AIChatPanel({
           }
         }}
         className="px-4 py-3"
-        style={{
-          borderTop: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
-        }}
+        style={{ borderTop: "1px solid var(--border-subtle)" }}
       >
         <div className="flex gap-2">
           <input
@@ -701,59 +644,57 @@ export default function AIChatPanel({
             placeholder="Ask the AI agent..."
             disabled={isLoading}
             autoComplete="off"
-            className="flex-1 px-3 py-2 rounded-xl text-sm outline-none"
+            className="flex-1 px-3 text-sm outline-none"
             style={{
-              background: isDarkMode ? "#242836" : "#f5f6f8",
-              border: `1px solid ${isDarkMode ? "#2a2e3d" : "#e2e4e8"}`,
-              color: isDarkMode ? "#e8eaed" : "#1f2937",
+              height: 40,
+              background: "var(--bg-surface-hover)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-md)",
+              color: "var(--text-primary)",
+              transition: "all var(--duration-fast) var(--ease-out)",
             }}
             onFocus={(e) => {
-              e.currentTarget.style.borderColor = "#4f7df9";
+              e.currentTarget.style.borderColor = "var(--border-active)";
+              e.currentTarget.style.boxShadow = "0 0 0 3px var(--accent-glow)";
             }}
             onBlur={(e) => {
-              e.currentTarget.style.borderColor = isDarkMode
-                ? "#2a2e3d"
-                : "#e2e4e8";
+              e.currentTarget.style.borderColor = "var(--border-default)";
+              e.currentTarget.style.boxShadow = "none";
             }}
           />
           {isLoading ? (
             <button
               type="button"
               onClick={stop}
-              className="px-3 py-2 rounded-xl text-sm font-medium text-white transition-all duration-150 cursor-pointer"
+              className="flex items-center justify-center text-white cursor-pointer"
               style={{
-                background: "#ef4444",
+                width: 40,
+                height: 40,
+                background: "var(--error)",
+                border: "none",
+                borderRadius: "var(--radius-sm)",
+                transition: "all var(--duration-fast) var(--ease-out)",
               }}
               title="Stop generating"
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                stroke="none"
-              >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
                 <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
             </button>
           ) : (
             <button
               type="submit"
-              className="px-3 py-2 rounded-xl text-sm font-medium text-white transition-opacity duration-150 cursor-pointer"
+              className="flex items-center justify-center text-white cursor-pointer"
               style={{
-                background: "linear-gradient(135deg, #4f7df9, #3b6ce8)",
+                width: 40,
+                height: 40,
+                background: "var(--accent)",
+                border: "none",
+                borderRadius: "var(--radius-sm)",
+                transition: "all var(--duration-fast) var(--ease-out)",
               }}
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="22" y1="2" x2="11" y2="13" />
                 <polygon points="22 2 15 22 11 13 2 9 22 2" />
               </svg>

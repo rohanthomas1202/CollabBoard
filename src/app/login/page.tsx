@@ -1,50 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/hooks/useTheme";
 import { useRouter } from "next/navigation";
-
-const themes = {
-  dark: {
-    bg: "linear-gradient(135deg, #0f1117 0%, #1a1d27 50%, #0f1117 100%)",
-    card: "rgba(26, 29, 39, 0.8)",
-    cardBorder: "#2a2e3d",
-    input: "#242836",
-    inputBorder: "#2a2e3d",
-    text: "#e8eaed",
-    textMuted: "#8b8fa3",
-    textFaint: "#5c6070",
-    divider: "#2a2e3d",
-    googleBtn: "#242836",
-    googleBtnHover: "#2a2e3d",
-    error: "rgba(239, 68, 68, 0.1)",
-    errorBorder: "rgba(239, 68, 68, 0.2)",
-    errorText: "#fca5a5",
-    toggleBg: "#242836",
-    toggleBorder: "#2a2e3d",
-    toggleColor: "#8b8fa3",
-  },
-  light: {
-    bg: "linear-gradient(135deg, #f0f2f5 0%, #e8eaf0 50%, #f0f2f5 100%)",
-    card: "rgba(255, 255, 255, 0.85)",
-    cardBorder: "#e2e4e8",
-    input: "#f5f6f8",
-    inputBorder: "#e2e4e8",
-    text: "#1f2937",
-    textMuted: "#6b7280",
-    textFaint: "#9ca3af",
-    divider: "#e2e4e8",
-    googleBtn: "#f5f6f8",
-    googleBtnHover: "#ebedf0",
-    error: "rgba(239, 68, 68, 0.08)",
-    errorBorder: "rgba(239, 68, 68, 0.2)",
-    errorText: "#dc2626",
-    toggleBg: "#f0f1f3",
-    toggleBorder: "#e2e4e8",
-    toggleColor: "#6b7280",
-  },
-};
 
 export default function LoginPage() {
   const [isSignup, setIsSignup] = useState(false);
@@ -55,8 +15,6 @@ export default function LoginPage() {
   const { isDark, toggleTheme } = useTheme();
   const { loginWithEmail, signupWithEmail, loginWithGoogle, user } = useAuth();
   const router = useRouter();
-
-  const t = isDark ? themes.dark : themes.light;
 
   useEffect(() => {
     if (user) {
@@ -90,129 +48,250 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: t.bg }}>
-      {/* Background glow (dark only) */}
-      {isDark && (
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full opacity-[0.04]" style={{ background: "radial-gradient(circle, #4f7df9, transparent)" }} />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full opacity-[0.03]" style={{ background: "radial-gradient(circle, #8b5cf6, transparent)" }} />
-        </div>
-      )}
-
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      data-theme={isDark ? "dark" : "light"}
+      style={{
+        background: isDark
+          ? `radial-gradient(ellipse at 20% 50%, rgba(108,140,255,0.08), transparent 60%),
+             radial-gradient(ellipse at 80% 20%, rgba(139,92,246,0.06), transparent 60%),
+             radial-gradient(ellipse at 50% 80%, rgba(59,130,246,0.05), transparent 60%),
+             var(--bg-primary)`
+          : "var(--bg-primary)",
+      }}
+    >
       {/* Theme toggle */}
       <button
         onClick={toggleTheme}
-        className="fixed top-4 right-4 w-9 h-9 rounded-xl flex items-center justify-center transition-all duration-200 cursor-pointer z-20"
-        style={{ background: t.toggleBg, border: `1px solid ${t.toggleBorder}`, color: t.toggleColor }}
+        className="fixed top-5 right-5 w-9 h-9 flex items-center justify-center cursor-pointer z-20"
+        style={{
+          background: "var(--bg-surface)",
+          border: "1px solid var(--border-default)",
+          borderRadius: "var(--radius-sm)",
+          color: "var(--text-secondary)",
+          transition: "all var(--duration-normal) var(--ease-out)",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.borderColor = "var(--border-hover)";
+          e.currentTarget.style.color = "var(--text-primary)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = "var(--border-default)";
+          e.currentTarget.style.color = "var(--text-secondary)";
+        }}
         title={isDark ? "Switch to light" : "Switch to dark"}
       >
         {isDark ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
           </svg>
         ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
           </svg>
         )}
       </button>
 
-      <div className="w-full max-w-md relative z-10">
+      <motion.div
+        className="w-full max-w-sm relative z-10"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.2, 1, 0.2, 1] }}
+      >
         {/* Logo area */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style={{ background: "linear-gradient(135deg, #4f7df9, #3b6ce8)" }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div className="text-center mb-10">
+          <div
+            className="inline-flex items-center justify-center w-14 h-14 mb-5"
+            style={{
+              background: "var(--accent)",
+              borderRadius: "var(--radius-lg)",
+              boxShadow: isDark ? "0 0 32px rgba(108,140,255,0.2)" : "none",
+            }}
+          >
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="7" rx="1" />
               <rect x="14" y="3" width="7" height="7" rx="1" />
               <rect x="3" y="14" width="7" height="7" rx="1" />
               <rect x="14" y="14" width="7" height="7" rx="1" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold" style={{ color: t.text }}>CollabBoard</h1>
-          <p className="mt-1.5 text-sm" style={{ color: t.textMuted }}>Real-time collaborative whiteboard</p>
+          <h1 className="text-3xl font-bold" style={{ color: "var(--text-primary)" }}>
+            CollabBoard
+          </h1>
+          <p className="mt-2 text-sm" style={{ color: "var(--text-secondary)" }}>
+            Real-time collaborative whiteboard
+          </p>
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl p-6 border" style={{ background: t.card, backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", borderColor: t.cardBorder }}>
-          <h2 className="text-lg font-semibold mb-5" style={{ color: t.text }}>
+        <div
+          className="p-7"
+          style={{
+            background: "var(--bg-surface)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: "var(--radius-xl)",
+            boxShadow: "var(--shadow-lg)",
+          }}
+        >
+          <h2 className="text-lg font-semibold mb-6" style={{ color: "var(--text-primary)" }}>
             {isSignup ? "Create Account" : "Welcome back"}
           </h2>
 
           {error && (
-            <div className="px-4 py-2.5 rounded-xl mb-4 text-sm" style={{ background: t.error, border: `1px solid ${t.errorBorder}`, color: t.errorText }}>
+            <div
+              className="px-4 py-2.5 mb-5 text-sm"
+              style={{
+                background: "var(--error-muted)",
+                border: "1px solid rgba(248,113,113,0.2)",
+                borderRadius: "var(--radius-md)",
+                color: "var(--error)",
+              }}
+            >
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {isSignup && (
               <div>
-                <label className="block text-xs font-medium mb-1.5" style={{ color: t.textMuted }}>Display Name</label>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                  Display Name
+                </label>
                 <input
                   type="text"
                   placeholder="Your name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all duration-200"
-                  style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.text }}
-                  onFocus={(e) => { e.target.style.borderColor = "#4f7df9"; e.target.style.boxShadow = "0 0 0 3px rgba(79,125,249,0.1)"; }}
-                  onBlur={(e) => { e.target.style.borderColor = t.inputBorder; e.target.style.boxShadow = "none"; }}
+                  className="w-full px-3.5 text-sm outline-none"
+                  style={{
+                    height: 44,
+                    background: "var(--bg-surface-hover)",
+                    border: "1px solid var(--border-default)",
+                    borderRadius: "var(--radius-md)",
+                    color: "var(--text-primary)",
+                    transition: "all var(--duration-normal) var(--ease-out)",
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = "var(--border-active)";
+                    e.target.style.boxShadow = "0 0 0 3px var(--accent-glow)";
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = "var(--border-default)";
+                    e.target.style.boxShadow = "none";
+                  }}
                   required
                 />
               </div>
             )}
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: t.textMuted }}>Email</label>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                Email
+              </label>
               <input
                 type="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all duration-200"
-                style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.text }}
-                onFocus={(e) => { e.target.style.borderColor = "#4f7df9"; e.target.style.boxShadow = "0 0 0 3px rgba(79,125,249,0.1)"; }}
-                onBlur={(e) => { e.target.style.borderColor = t.inputBorder; e.target.style.boxShadow = "none"; }}
+                className="w-full px-3.5 text-sm outline-none"
+                style={{
+                  height: 44,
+                  background: "var(--bg-surface-hover)",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-primary)",
+                  transition: "all var(--duration-normal) var(--ease-out)",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "var(--border-active)";
+                  e.target.style.boxShadow = "0 0 0 3px var(--accent-glow)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "var(--border-default)";
+                  e.target.style.boxShadow = "none";
+                }}
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-medium mb-1.5" style={{ color: t.textMuted }}>Password</label>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--text-secondary)" }}>
+                Password
+              </label>
               <input
                 type="password"
                 placeholder="At least 6 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl text-sm outline-none transition-all duration-200"
-                style={{ background: t.input, border: `1px solid ${t.inputBorder}`, color: t.text }}
-                onFocus={(e) => { e.target.style.borderColor = "#4f7df9"; e.target.style.boxShadow = "0 0 0 3px rgba(79,125,249,0.1)"; }}
-                onBlur={(e) => { e.target.style.borderColor = t.inputBorder; e.target.style.boxShadow = "none"; }}
+                className="w-full px-3.5 text-sm outline-none"
+                style={{
+                  height: 44,
+                  background: "var(--bg-surface-hover)",
+                  border: "1px solid var(--border-default)",
+                  borderRadius: "var(--radius-md)",
+                  color: "var(--text-primary)",
+                  transition: "all var(--duration-normal) var(--ease-out)",
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = "var(--border-active)";
+                  e.target.style.boxShadow = "0 0 0 3px var(--accent-glow)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = "var(--border-default)";
+                  e.target.style.boxShadow = "none";
+                }}
                 required
                 minLength={6}
               />
             </div>
             <button
               type="submit"
-              className="w-full py-2.5 rounded-xl font-medium text-sm text-white transition-all duration-200 hover:shadow-lg cursor-pointer"
-              style={{ background: "linear-gradient(135deg, #4f7df9, #3b6ce8)" }}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(79,125,249,0.3)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+              className="w-full font-medium text-sm text-white cursor-pointer"
+              style={{
+                height: 44,
+                background: "var(--accent)",
+                borderRadius: "var(--radius-lg)",
+                border: "none",
+                transition: "all var(--duration-normal) var(--ease-out)",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "var(--accent-hover)";
+                e.currentTarget.style.boxShadow = "var(--shadow-glow)";
+                e.currentTarget.style.transform = "translateY(-1px)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "var(--accent)";
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
             >
               {isSignup ? "Create Account" : "Sign In"}
             </button>
           </form>
 
-          <div className="my-5 flex items-center gap-4">
-            <hr className="flex-1" style={{ borderColor: t.divider }} />
-            <span className="text-xs" style={{ color: t.textFaint }}>or</span>
-            <hr className="flex-1" style={{ borderColor: t.divider }} />
+          <div className="my-6 flex items-center gap-4">
+            <hr className="flex-1 border-0" style={{ height: 1, background: "var(--border-subtle)" }} />
+            <span className="text-xs" style={{ color: "var(--text-quaternary)" }}>or</span>
+            <hr className="flex-1 border-0" style={{ height: 1, background: "var(--border-subtle)" }} />
           </div>
 
           <button
             onClick={handleGoogle}
-            className="w-full py-2.5 rounded-xl font-medium text-sm transition-all duration-200 flex items-center justify-center gap-2.5 cursor-pointer"
-            style={{ background: t.googleBtn, border: `1px solid ${t.cardBorder}`, color: t.text }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = isDark ? "#3d4258" : "#d1d5db"; e.currentTarget.style.background = t.googleBtnHover; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.cardBorder; e.currentTarget.style.background = t.googleBtn; }}
+            className="w-full font-medium text-sm flex items-center justify-center gap-2.5 cursor-pointer"
+            style={{
+              height: 44,
+              background: "var(--bg-surface)",
+              border: "1px solid var(--border-default)",
+              borderRadius: "var(--radius-lg)",
+              color: "var(--text-primary)",
+              transition: "all var(--duration-normal) var(--ease-out)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "var(--border-hover)";
+              e.currentTarget.style.background = "var(--bg-surface-hover)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "var(--border-default)";
+              e.currentTarget.style.background = "var(--bg-surface)";
+            }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -223,21 +302,28 @@ export default function LoginPage() {
             Continue with Google
           </button>
 
-          <p className="text-sm text-center mt-5" style={{ color: t.textMuted }}>
+          <p className="text-sm text-center mt-6" style={{ color: "var(--text-secondary)" }}>
             {isSignup ? "Already have an account?" : "Don't have an account?"}{" "}
             <button
               onClick={() => {
                 setIsSignup(!isSignup);
                 setError("");
               }}
-              className="font-medium hover:underline cursor-pointer"
-              style={{ color: "#4f7df9" }}
+              className="font-medium cursor-pointer"
+              style={{
+                color: "var(--accent)",
+                background: "none",
+                border: "none",
+                transition: "opacity var(--duration-fast) var(--ease-out)",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
             >
               {isSignup ? "Sign in" : "Sign up"}
             </button>
           </p>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

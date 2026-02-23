@@ -11,6 +11,7 @@ import {
   serverTimestamp,
   query,
   orderBy,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { BoardObject } from "@/lib/types";
@@ -65,10 +66,10 @@ export function useBoard(boardId: string) {
   const updateObject = useCallback(
     async (objectId: string, updates: Partial<BoardObject>) => {
       const objectRef = doc(db, "boards", boardId, "objects", objectId);
-      await updateDoc(objectRef, stripUndefined({
+      await setDoc(objectRef, stripUndefined({
         ...updates,
         updatedAt: Date.now(),
-      }));
+      }), { merge: true });
     },
     [boardId]
   );
@@ -81,11 +82,47 @@ export function useBoard(boardId: string) {
     [boardId]
   );
 
+  // Re-create a previously deleted object with its original ID
+  const restoreObject = useCallback(
+    async (obj: BoardObject) => {
+      const { id, ...data } = obj;
+      const objectRef = doc(db, "boards", boardId, "objects", id);
+      await setDoc(objectRef, stripUndefined({
+        ...data,
+        updatedAt: Date.now(),
+      }));
+    },
+    [boardId]
+  );
+
   const moveObject = useCallback(
     async (objectId: string, x: number, y: number) => {
       await updateObject(objectId, { x, y });
     },
     [updateObject]
+  );
+
+  const toggleReaction = useCallback(
+    async (objectId: string, emoji: string, userId: string) => {
+      const obj = objects.find((o) => o.id === objectId);
+      if (!obj) return;
+      const reactions = { ...(obj.reactions || {}) };
+      const users = reactions[emoji] ? [...reactions[emoji]] : [];
+      const idx = users.indexOf(userId);
+      if (idx >= 0) {
+        users.splice(idx, 1);
+      } else {
+        users.push(userId);
+      }
+      if (users.length > 0) {
+        reactions[emoji] = users;
+      } else {
+        delete reactions[emoji];
+      }
+      const objectRef = doc(db, "boards", boardId, "objects", objectId);
+      await updateDoc(objectRef, { reactions, updatedAt: Date.now() });
+    },
+    [boardId, objects]
   );
 
   const resizeObject = useCallback(
@@ -95,13 +132,50 @@ export function useBoard(boardId: string) {
     [updateObject]
   );
 
+  const batchUpdateObjects = useCallback(
+    async (updates: Array<{ id: string; changes: Partial<BoardObject> }>) => {
+      const now = Date.now();
+      // Firestore WriteBatch supports up to 500 ops — chunk if needed
+      for (let i = 0; i < updates.length; i += 450) {
+        const chunk = updates.slice(i, i + 450);
+        const batch = writeBatch(db);
+        for (const { id, changes } of chunk) {
+          const ref = doc(db, "boards", boardId, "objects", id);
+          const data = stripUndefined({ ...changes, updatedAt: now } as Record<string, unknown>);
+          batch.update(ref, data as { [x: string]: Partial<unknown> });
+        }
+        await batch.commit();
+      }
+    },
+    [boardId]
+  );
+
+  const batchDeleteObjects = useCallback(
+    async (ids: string[]) => {
+      for (let i = 0; i < ids.length; i += 450) {
+        const chunk = ids.slice(i, i + 450);
+        const batch = writeBatch(db);
+        for (const id of chunk) {
+          const ref = doc(db, "boards", boardId, "objects", id);
+          batch.delete(ref);
+        }
+        await batch.commit();
+      }
+    },
+    [boardId]
+  );
+
   return {
     objects,
     loading,
     addObject,
     updateObject,
     deleteObject,
+    restoreObject,
+    toggleReaction,
     moveObject,
     resizeObject,
+    batchUpdateObjects,
+    batchDeleteObjects,
   };
 }

@@ -28,7 +28,7 @@ describe("Toolbar", () => {
   it("highlights the active tool", () => {
     render(<Toolbar {...defaultProps} activeTool="rectangle" />);
     const rectButton = screen.getByTitle("Rectangle (R)");
-    expect(rectButton.style.background).toContain("linear-gradient");
+    expect(rectButton.style.background).toContain("var(--accent)");
   });
 
   it("calls onToolChange when a tool is clicked", () => {

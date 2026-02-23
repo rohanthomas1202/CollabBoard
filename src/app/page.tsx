@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   collection,
   onSnapshot,
@@ -17,44 +18,53 @@ import { Board } from "@/lib/types";
 
 type Tab = "all" | "my" | "shared";
 
-const themes = {
-  dark: {
-    bg: "#0f1117",
-    headerBg: "rgba(26, 29, 39, 0.7)",
-    headerBorder: "#2a2e3d",
-    surface: "#1a1d27",
-    surface2: "#242836",
-    border: "#2a2e3d",
-    borderHover: "#3d4258",
-    text: "#e8eaed",
-    textMuted: "#8b8fa3",
-    textFaint: "#5c6070",
-    cardPreview: "linear-gradient(135deg, #242836, #1a1d27)",
-    previewIcon: "#3d4258",
-    cardShadow: "0 8px 24px rgba(0,0,0,0.3)",
-    toggleBg: "#242836",
-    toggleBorder: "#2a2e3d",
-    toggleColor: "#8b8fa3",
-    deleteBg: "rgba(239,68,68,0.1)",
-  },
-  light: {
-    bg: "#f5f6f8",
-    headerBg: "rgba(255, 255, 255, 0.8)",
-    headerBorder: "#e2e4e8",
-    surface: "#ffffff",
-    surface2: "#f0f1f3",
-    border: "#e2e4e8",
-    borderHover: "#d1d5db",
-    text: "#1f2937",
-    textMuted: "#6b7280",
-    textFaint: "#9ca3af",
-    cardPreview: "linear-gradient(135deg, #f0f1f3, #e8eaf0)",
-    previewIcon: "#d1d5db",
-    cardShadow: "0 8px 24px rgba(0,0,0,0.08)",
-    toggleBg: "#f0f1f3",
-    toggleBorder: "#e2e4e8",
-    toggleColor: "#6b7280",
-    deleteBg: "rgba(239,68,68,0.08)",
+function timeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+const BOARD_GRADIENTS = [
+  "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+  "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+  "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)",
+  "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)",
+  "linear-gradient(135deg, #fa709a 0%, #fee140 100%)",
+  "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)",
+  "linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)",
+  "linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%)",
+];
+
+function boardGradient(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return BOARD_GRADIENTS[Math.abs(hash) % BOARD_GRADIENTS.length];
+}
+
+const staggerContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.06 } },
+};
+const staggerItem = {
+  hidden: { opacity: 0, y: 16, scale: 0.97 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.4, ease: [0.2, 1, 0.2, 1] as [number, number, number, number] },
   },
 };
 
@@ -62,56 +72,84 @@ export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [allBoards, setAllBoards] = useState<Board[]>([]);
-  const [myBoards, setMyBoards] = useState<Board[]>([]);
-  const [sharedBoards, setSharedBoards] = useState<Board[]>([]);
   const [boardsLoading, setBoardsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const { isDark, toggleTheme } = useTheme();
 
-  const t = isDark ? themes.dark : themes.light;
+  // Derive myBoards and sharedBoards from allBoards (no separate state needed)
+  const myBoards = useMemo(
+    () => (user ? allBoards.filter((b) => b.ownerId === user.uid) : []),
+    [allBoards, user]
+  );
+  const sharedBoards = useMemo(
+    () =>
+      user
+        ? allBoards.filter(
+            (b) => b.ownerId !== user.uid && (b.sharedWith || []).includes(user.uid)
+          )
+        : [],
+    [allBoards, user]
+  );
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push("/login");
-    }
+    if (!loading && !user) router.push("/login");
   }, [user, loading, router]);
 
   useEffect(() => {
     if (!user) return;
 
-    const unsubscribe = onSnapshot(collection(db, "boards"), (snapshot) => {
-      const list: Board[] = [];
-      snapshot.forEach((d) => {
-        list.push({ id: d.id, ...d.data() } as Board);
-      });
-      list.sort((a, b) => b.createdAt - a.createdAt);
-      setAllBoards(list);
-      setMyBoards(list.filter((b) => b.ownerId === user.uid));
-      setBoardsLoading(false);
-    }, (error) => {
-      console.error("All boards listener error:", error);
-      setBoardsLoading(false);
-    });
+    let unsubscribe: (() => void) | null = null;
 
-    return unsubscribe;
+    const subscribe = () => {
+      if (unsubscribe) unsubscribe();
+      unsubscribe = onSnapshot(
+        collection(db, "boards"),
+        { includeMetadataChanges: true },
+        (snapshot) => {
+          const list: Board[] = [];
+          snapshot.forEach((d) => list.push({ id: d.id, ...d.data() } as Board));
+          list.sort((a, b) => b.createdAt - a.createdAt);
+          setAllBoards(list);
+          // Only clear loading when we have server-confirmed data
+          if (!snapshot.metadata.fromCache || list.length > 0) {
+            setBoardsLoading(false);
+          }
+        },
+        (error) => {
+          console.error("All boards listener error:", error);
+          setBoardsLoading(false);
+        }
+      );
+    };
+
+    subscribe();
+
+    // Re-subscribe when the page becomes visible again.
+    // Handles: browser back/forward cache, tab switching, and
+    // cases where the Firestore WebSocket dropped during navigation.
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        subscribe();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      if (unsubscribe) unsubscribe();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
-    setSharedBoards(
-      allBoards.filter(
-        (b) => b.ownerId !== user.uid && (b.sharedWith || []).includes(user.uid)
-      )
-    );
-  }, [allBoards, user]);
-
-  const displayedBoards =
-    activeTab === "my"
-      ? myBoards
-      : activeTab === "shared"
-      ? sharedBoards
-      : allBoards;
+  const displayedBoards = useMemo(() => {
+    const source =
+      activeTab === "my" ? myBoards : activeTab === "shared" ? sharedBoards : allBoards;
+    if (!searchQuery.trim()) return source;
+    const q = searchQuery.toLowerCase();
+    return source.filter((b) => b.name.toLowerCase().includes(q));
+  }, [activeTab, myBoards, sharedBoards, allBoards, searchQuery]);
 
   const createBoard = async () => {
     if (!user) return;
@@ -144,10 +182,10 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: t.bg }}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#4f7df9", borderTopColor: "transparent" }} />
-          <span style={{ color: t.textMuted }} className="text-sm">Loading...</span>
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg-primary)" }}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="dashboard-loader" />
+          <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>Loading your workspace...</span>
         </div>
       </div>
     );
@@ -155,237 +193,370 @@ export default function DashboardPage() {
 
   if (!user) return null;
 
-  const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: "all", label: "All Boards", count: allBoards.length },
-    { key: "my", label: "My Boards", count: myBoards.length },
-    { key: "shared", label: "Shared", count: sharedBoards.length },
+  const tabs: { key: Tab; label: string; count: number; icon: React.ReactNode }[] = [
+    {
+      key: "all",
+      label: "All Boards",
+      count: allBoards.length,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+      ),
+    },
+    {
+      key: "my",
+      label: "My Boards",
+      count: myBoards.length,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+      ),
+    },
+    {
+      key: "shared",
+      label: "Shared",
+      count: sharedBoards.length,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
+        </svg>
+      ),
+    },
   ];
 
   const userInitial = (user.displayName || user.email || "U")[0].toUpperCase();
+  const firstName = (user.displayName || user.email || "").split(/[\s@]/)[0];
 
   return (
-    <div className="min-h-screen" style={{ background: t.bg }}>
+    <div className="min-h-screen" data-theme={isDark ? "dark" : "light"} style={{ background: "var(--bg-primary)" }}>
+      {/* Ambient background glow */}
+      <div className="dashboard-ambient" />
+
       {/* Header */}
-      <header style={{ background: t.headerBg, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)", borderBottom: `1px solid ${t.headerBorder}` }}>
-        <div className="max-w-6xl mx-auto px-6 py-3.5 flex items-center justify-between">
+      <header className="dashboard-header">
+        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #4f7df9, #3b6ce8)" }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <div className="dashboard-logo">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="7" height="7" rx="1" />
                 <rect x="14" y="3" width="7" height="7" rx="1" />
                 <rect x="3" y="14" width="7" height="7" rx="1" />
                 <rect x="14" y="14" width="7" height="7" rx="1" />
               </svg>
             </div>
-            <h1 className="text-base font-semibold" style={{ color: t.text }}>CollabBoard</h1>
+            <h1 className="text-base font-bold tracking-tight" style={{ color: "var(--text-primary)" }}>
+              CollabBoard
+            </h1>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Theme toggle */}
-            <button
-              onClick={toggleTheme}
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 cursor-pointer"
-              style={{ background: t.toggleBg, border: `1px solid ${t.toggleBorder}`, color: t.toggleColor }}
-              title={isDark ? "Switch to light" : "Switch to dark"}
-            >
+
+          <div className="flex items-center gap-1.5">
+            <button onClick={toggleTheme} className="dashboard-icon-btn" title={isDark ? "Light mode" : "Dark mode"}>
               {isDark ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
                 </svg>
               ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
                 </svg>
               )}
             </button>
-            <div className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl" style={{ background: t.surface2 }}>
-              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white" style={{ background: "linear-gradient(135deg, #4f7df9, #8b5cf6)" }}>
-                {userInitial}
-              </div>
-              <span className="text-sm" style={{ color: t.textMuted }}>
+
+            <div className="dashboard-user-pill">
+              <div className="dashboard-avatar">{userInitial}</div>
+              <span className="text-sm font-medium" style={{ color: "var(--text-secondary)" }}>
                 {user.displayName || user.email}
               </span>
             </div>
-            <button
-              onClick={logout}
-              className="text-sm px-3 py-1.5 rounded-xl transition-all duration-200 cursor-pointer"
-              style={{ color: t.textMuted, background: "transparent" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = t.surface2; e.currentTarget.style.color = t.text; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = t.textMuted; }}
-            >
-              Sign Out
+
+            <button onClick={logout} className="dashboard-icon-btn" title="Sign out">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Content */}
-      <main className="max-w-6xl mx-auto px-6 py-8">
-        <div className="flex items-center justify-between mb-8">
+      {/* Main content */}
+      <main className="max-w-6xl mx-auto px-6 pt-10 pb-16">
+        {/* Greeting + stats */}
+        <motion.div
+          className="mb-10"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: [0.2, 1, 0.2, 1] }}
+        >
+          <h2 className="text-3xl font-bold tracking-tight mb-2" style={{ color: "var(--text-primary)" }}>
+            {getGreeting()}, {firstName}
+          </h2>
+          <p className="text-base" style={{ color: "var(--text-tertiary)" }}>
+            {allBoards.length === 0
+              ? "Create your first board to get started."
+              : `You have ${myBoards.length} board${myBoards.length !== 1 ? "s" : ""}${sharedBoards.length > 0 ? ` and ${sharedBoards.length} shared with you` : ""}.`}
+          </p>
+        </motion.div>
+
+        {/* Controls row */}
+        <motion.div
+          className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.1, ease: [0.2, 1, 0.2, 1] }}
+        >
           {/* Tabs */}
-          <div className="flex gap-1 p-1 rounded-xl" style={{ background: t.surface }}>
+          <div className="dashboard-tabs">
             {tabs.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer"
-                style={{
-                  background: activeTab === tab.key ? t.surface2 : "transparent",
-                  color: activeTab === tab.key ? t.text : t.textMuted,
-                  boxShadow: activeTab === tab.key ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-                }}
+                className={`dashboard-tab ${activeTab === tab.key ? "dashboard-tab-active" : ""}`}
               >
-                {tab.label}
-                <span className="ml-1.5 text-xs opacity-50">{tab.count}</span>
+                {tab.icon}
+                <span>{tab.label}</span>
+                <span className="dashboard-tab-count">{tab.count}</span>
               </button>
             ))}
           </div>
-          <button
-            onClick={createBoard}
-            className="px-4 py-2.5 rounded-xl font-medium text-sm text-white transition-all duration-200 flex items-center gap-2 cursor-pointer"
-            style={{ background: "linear-gradient(135deg, #4f7df9, #3b6ce8)" }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(79,125,249,0.3)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            New Board
-          </button>
-        </div>
 
+          <div className="flex items-center gap-3">
+            {/* Search */}
+            <div className="dashboard-search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search boards..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="dashboard-search-input"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="dashboard-search-clear"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* New board button */}
+            <button onClick={createBoard} className="dashboard-new-btn">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>New Board</span>
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Board grid */}
         {boardsLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: "#4f7df9", borderTopColor: "transparent" }} />
+          <div className="flex items-center justify-center py-32">
+            <div className="dashboard-loader" />
           </div>
         ) : displayedBoards.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4" style={{ background: "rgba(79, 125, 249, 0.1)" }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4f7df9" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                <line x1="12" y1="8" x2="12" y2="16" />
-                <line x1="8" y1="12" x2="16" y2="12" />
+          <motion.div
+            className="text-center py-28"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.4, ease: [0.2, 1, 0.2, 1] }}
+          >
+            <div className="dashboard-empty-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <defs>
+                  <linearGradient id="emptyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="var(--accent)" />
+                    <stop offset="100%" stopColor="#a78bfa" />
+                  </linearGradient>
+                </defs>
+                <rect x="3" y="3" width="18" height="18" rx="3" stroke="url(#emptyGrad)" />
+                <line x1="12" y1="8" x2="12" y2="16" stroke="url(#emptyGrad)" />
+                <line x1="8" y1="12" x2="16" y2="12" stroke="url(#emptyGrad)" />
               </svg>
             </div>
-            <p className="mb-1 font-medium" style={{ color: t.text }}>
-              {activeTab === "shared" ? "No shared boards yet" : "No boards yet"}
+            <h3 className="text-xl font-semibold mb-2" style={{ color: "var(--text-primary)" }}>
+              {searchQuery
+                ? "No boards found"
+                : activeTab === "shared"
+                ? "No shared boards yet"
+                : "Create your first board"}
+            </h3>
+            <p className="text-sm mb-8 max-w-xs mx-auto" style={{ color: "var(--text-tertiary)" }}>
+              {searchQuery
+                ? `No results for "${searchQuery}". Try a different search.`
+                : activeTab === "shared"
+                ? "When someone shares a board with you, it will appear here."
+                : "Start collaborating by creating a new whiteboard."}
             </p>
-            <p className="text-sm mb-6" style={{ color: t.textFaint }}>
-              {activeTab === "shared"
-                ? "Boards shared with you will appear here."
-                : "Create your first collaborative whiteboard."}
-            </p>
-            {activeTab !== "shared" && (
-              <button
-                onClick={createBoard}
-                className="px-6 py-3 rounded-xl font-medium text-sm text-white transition-all duration-200 cursor-pointer"
-                style={{ background: "linear-gradient(135deg, #4f7df9, #3b6ce8)" }}
-              >
-                Create Board
+            {!searchQuery && activeTab !== "shared" && (
+              <button onClick={createBoard} className="dashboard-new-btn" style={{ display: "inline-flex" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span>Create Board</span>
               </button>
             )}
-          </div>
+          </motion.div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayedBoards.map((board) => {
-              const isOwner = board.ownerId === user.uid;
-              return (
-                <div
-                  key={board.id}
-                  className="rounded-2xl p-4 transition-all duration-200 cursor-pointer group"
-                  style={{ background: t.surface, border: `1px solid ${t.border}` }}
-                  onClick={() => router.push(`/board/${board.id}`)}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = t.borderHover; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = t.cardShadow; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-                >
-                  {/* Preview area */}
-                  <div className="h-32 rounded-xl mb-3 flex items-center justify-center relative overflow-hidden" style={{ background: t.cardPreview }}>
-                    {board.thumbnail ? (
-                      <img
-                        src={board.thumbnail}
-                        alt={board.name}
-                        className="w-full h-full object-cover rounded-xl"
-                        draggable={false}
-                      />
-                    ) : (
-                      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={t.previewIcon} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                        <rect x="3" y="3" width="7" height="7" rx="1" />
-                        <rect x="14" y="3" width="7" height="7" rx="1" />
-                        <rect x="3" y="14" width="7" height="7" rx="1" />
-                        <rect x="14" y="14" width="7" height="7" rx="1" />
-                      </svg>
-                    )}
-                    {!isOwner && (
-                      <span className="absolute top-2 right-2 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: "rgba(79, 125, 249, 0.15)", color: "#4f7df9" }}>
-                        Shared
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex items-start justify-between">
-                    <div className="min-w-0 flex-1">
-                      <h3
-                        className="font-medium text-sm truncate transition-colors duration-200"
-                        style={{ color: t.text }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          renameBoardHandler(board.id, board.name);
-                        }}
-                        title="Click to rename"
-                        onMouseEnter={(e) => { e.currentTarget.style.color = "#4f7df9"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.color = t.text; }}
-                      >
-                        {board.name}
-                      </h3>
-                      <p className="text-xs mt-1" style={{ color: t.textFaint }}>
-                        {new Date(board.createdAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {isOwner && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteBoardHandler(board.id);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition-all duration-200 p-1.5 rounded-lg cursor-pointer"
-                        style={{ color: t.textFaint }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = t.deleteBg; e.currentTarget.style.color = "#ef4444"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = t.textFaint; }}
-                        title="Delete board"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Share link */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      copyShareLink(board.id);
-                    }}
-                    className="mt-2.5 text-xs font-medium flex items-center gap-1.5 transition-colors duration-200 cursor-pointer"
-                    style={{ color: copiedId === board.id ? "#22c55e" : "#4f7df9" }}
+          <AnimatePresence mode="wait">
+            <motion.div
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
+              variants={staggerContainer}
+              initial="hidden"
+              animate="show"
+              key={activeTab + searchQuery}
+            >
+              {displayedBoards.map((board) => {
+                const isOwner = board.ownerId === user.uid;
+                const isHovered = hoveredCard === board.id;
+                return (
+                  <motion.div
+                    key={board.id}
+                    variants={staggerItem}
+                    className="dashboard-card group"
+                    onClick={() => router.push(`/board/${board.id}`)}
+                    onMouseEnter={() => setHoveredCard(board.id)}
+                    onMouseLeave={() => setHoveredCard(null)}
                   >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                      {copiedId === board.id ? (
-                        <path d="M20 6L9 17l-5-5" />
-                      ) : (
-                        <>
-                          <rect x="9" y="9" width="13" height="13" rx="2" />
-                          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                        </>
-                      )}
-                    </svg>
-                    {copiedId === board.id ? "Copied!" : "Copy share link"}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                    {/* Gradient border glow on hover */}
+                    <div
+                      className="dashboard-card-glow"
+                      style={{
+                        opacity: isHovered ? 1 : 0,
+                        background: boardGradient(board.id),
+                      }}
+                    />
+
+                    <div className="dashboard-card-inner">
+                      {/* Preview area */}
+                      <div className="dashboard-card-preview">
+                        {board.thumbnail ? (
+                          <>
+                            <img
+                              src={board.thumbnail}
+                              alt={board.name}
+                              className="dashboard-card-thumbnail"
+                              draggable={false}
+                            />
+                            {/* Hover zoom overlay */}
+                            <div className="dashboard-card-zoom-overlay">
+                              <img
+                                src={board.thumbnail}
+                                alt=""
+                                className="dashboard-card-zoom-img"
+                                draggable={false}
+                              />
+                              <div className="dashboard-card-zoom-label">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                  <circle cx="11" cy="11" r="8" />
+                                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                  <line x1="11" y1="8" x2="11" y2="14" />
+                                  <line x1="8" y1="11" x2="14" y2="11" />
+                                </svg>
+                                <span>Preview</span>
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div
+                              className="dashboard-card-gradient"
+                              style={{ background: boardGradient(board.id) }}
+                            />
+                            <div className="dashboard-card-grid" />
+                            <div className="dashboard-card-icon">
+                              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
+                                <rect x="3" y="3" width="7" height="7" rx="1" />
+                                <rect x="14" y="3" width="7" height="7" rx="1" />
+                                <rect x="3" y="14" width="7" height="7" rx="1" />
+                                <rect x="14" y="14" width="7" height="7" rx="1" />
+                              </svg>
+                            </div>
+                          </>
+                        )}
+                        {!isOwner && (
+                          <span className="dashboard-badge-shared">Shared</span>
+                        )}
+                      </div>
+
+                      {/* Card body */}
+                      <div className="p-4">
+                        <div className="flex items-start justify-between mb-1">
+                          <h3
+                            className="font-semibold text-sm truncate flex-1 cursor-pointer dashboard-card-title"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              renameBoardHandler(board.id, board.name);
+                            }}
+                            title="Click to rename"
+                          >
+                            {board.name}
+                          </h3>
+                          <div className="flex items-center gap-0.5 ml-2 opacity-0 group-hover:opacity-100" style={{ transition: "opacity 150ms" }}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyShareLink(board.id);
+                              }}
+                              className="dashboard-card-action"
+                              title={copiedId === board.id ? "Copied!" : "Copy share link"}
+                            >
+                              {copiedId === board.id ? (
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5" strokeLinecap="round">
+                                  <path d="M20 6L9 17l-5-5" />
+                                </svg>
+                              ) : (
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                                </svg>
+                              )}
+                            </button>
+                            {isOwner && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deleteBoardHandler(board.id);
+                                }}
+                                className="dashboard-card-action dashboard-card-action-danger"
+                                title="Delete board"
+                              >
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                  <path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs" style={{ color: "var(--text-quaternary)" }}>
+                          {timeAgo(board.updatedAt || board.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </AnimatePresence>
         )}
       </main>
     </div>

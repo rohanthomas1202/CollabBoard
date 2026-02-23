@@ -7,7 +7,7 @@ import { KonvaEventObject } from "konva/lib/Node";
 interface ShapeProps {
   obj: BoardObject;
   isSelected: boolean;
-  onSelect: () => void;
+  onSelect: (shiftKey?: boolean) => void;
   onDragEnd: (x: number, y: number) => void;
   onDragMove?: (x: number, y: number) => void;
   onDblClick?: () => void;
@@ -80,8 +80,8 @@ export default function Shape({
       x={obj.x}
       y={obj.y}
       draggable={draggable}
-      onClick={onSelect}
-      onTap={onSelect}
+      onClick={(e) => onSelect((e.evt as MouseEvent).shiftKey)}
+      onTap={() => onSelect(false)}
       onDblClick={onDblClick}
       onDblTap={onDblClick}
       onDragEnd={handleDragEnd}

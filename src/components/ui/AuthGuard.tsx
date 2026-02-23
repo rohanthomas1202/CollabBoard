@@ -16,13 +16,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen" style={{ background: "#0f1117" }}>
+      <div className="flex items-center justify-center h-screen" style={{ background: "var(--bg-primary)" }}>
         <div className="flex flex-col items-center gap-3">
           <div
-            className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin"
-            style={{ borderColor: "#4f7df9", borderTopColor: "transparent" }}
+            className="w-6 h-6 rounded-full border-2 border-t-transparent"
+            style={{ borderColor: "var(--accent)", borderTopColor: "transparent", animation: "spin 1s linear infinite" }}
           />
-          <span style={{ color: "#8b8fa3" }} className="text-sm">Loading...</span>
+          <span className="text-sm" style={{ color: "var(--text-tertiary)" }}>Loading...</span>
         </div>
       </div>
     );

@@ -5,17 +5,19 @@ import {
   ref,
   onValue,
   set,
+  update,
   onDisconnect,
   remove,
   serverTimestamp,
 } from "firebase/database";
 import { rtdb } from "@/lib/firebase";
 import { CursorData, COLORS } from "@/lib/types";
-import { CURSOR_THROTTLE_MS } from "@/lib/constants";
+import { CURSOR_THROTTLE_MS, CURSOR_CHAT_DURATION_MS } from "@/lib/constants";
 
 export function usePresence(boardId: string, userId: string, userName: string) {
   const [cursors, setCursors] = useState<Record<string, CursorData>>({});
   const lastUpdateRef = useRef(0);
+  const lastCursorRef = useRef({ x: 0, y: 0 });
   const colorRef = useRef(
     COLORS.cursor[Math.abs(hashCode(userId)) % COLORS.cursor.length]
   );
@@ -58,12 +60,13 @@ export function usePresence(boardId: string, userId: string, userName: string) {
   // Throttled cursor position update
   const updateCursor = useCallback(
     (x: number, y: number) => {
+      lastCursorRef.current = { x, y };
       const now = Date.now();
       if (now - lastUpdateRef.current < CURSOR_THROTTLE_MS) return;
       lastUpdateRef.current = now;
 
       const myRef = ref(rtdb, `presence/${boardId}/${userId}`);
-      set(myRef, {
+      update(myRef, {
         name: userName || "Anonymous",
         color: colorRef.current,
         x,
@@ -74,7 +77,54 @@ export function usePresence(boardId: string, userId: string, userName: string) {
     [boardId, userId, userName]
   );
 
-  return { cursors, updateCursor, myColor: colorRef.current };
+  // Send an ephemeral cursor chat message (auto-clears after CURSOR_CHAT_DURATION_MS)
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const sendCursorMessage = useCallback(
+    (message: string) => {
+      if (!boardId || !userId) return;
+      const myRef = ref(rtdb, `presence/${boardId}/${userId}`);
+      const now = Date.now();
+      set(myRef, {
+        name: userName || "Anonymous",
+        color: colorRef.current,
+        x: lastCursorRef.current.x,
+        y: lastCursorRef.current.y,
+        lastSeen: now,
+        message,
+        messageTimestamp: now,
+      });
+
+      // Auto-clear after duration
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = setTimeout(() => {
+        clearCursorMessage();
+        clearTimerRef.current = null;
+      }, CURSOR_CHAT_DURATION_MS);
+    },
+    [boardId, userId, userName]
+  );
+
+  const clearCursorMessage = useCallback(() => {
+    if (!boardId || !userId) return;
+    const myRef = ref(rtdb, `presence/${boardId}/${userId}`);
+    set(myRef, {
+      name: userName || "Anonymous",
+      color: colorRef.current,
+      x: lastCursorRef.current.x,
+      y: lastCursorRef.current.y,
+      lastSeen: Date.now(),
+    });
+  }, [boardId, userId, userName]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+    };
+  }, []);
+
+  return { cursors, updateCursor, myColor: colorRef.current, sendCursorMessage, clearCursorMessage };
 }
 
 function hashCode(str: string): number {

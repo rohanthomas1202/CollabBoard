@@ -5,7 +5,8 @@ export type BoardObjectType =
   | "line"
   | "text"
   | "frame"
-  | "connector";
+  | "connector"
+  | "freehand";
 
 export interface BoardObject {
   id: string;
@@ -21,6 +22,10 @@ export interface BoardObject {
   connectedFrom?: string;
   connectedTo?: string;
   fontSize?: number;
+  points?: number[];
+  strokeWidth?: number;
+  reactions?: Record<string, string[]>; // emoji → userId[]
+  votes?: Record<string, number>; // userId → vote count
   updatedAt: number;
   createdBy: string;
 }
@@ -41,10 +46,27 @@ export interface CursorData {
   name: string;
   color: string;
   lastSeen: number;
+  message?: string;
+  messageTimestamp?: number;
 }
 
 export interface PresenceData {
   [userId: string]: CursorData;
+}
+
+export interface UndoSubEntry {
+  type: "create" | "update" | "delete";
+  objectId: string;
+  before?: BoardObject;
+  after?: BoardObject;
+}
+
+export interface UndoEntry {
+  type: "create" | "update" | "delete" | "batch";
+  objectId: string;
+  before?: BoardObject;
+  after?: BoardObject;
+  entries?: UndoSubEntry[];
 }
 
 export type Tool =
@@ -55,7 +77,27 @@ export type Tool =
   | "circle"
   | "line"
   | "text"
-  | "connector";
+  | "connector"
+  | "freehand"
+  | "comment";
+
+export interface CommentMessage {
+  userId: string;
+  userName: string;
+  text: string;
+  createdAt: number;
+}
+
+export interface Comment {
+  id: string;
+  x: number;
+  y: number;
+  objectId?: string;
+  resolved: boolean;
+  messages: CommentMessage[];
+  createdBy: string;
+  createdAt: number;
+}
 
 export const COLORS = {
   stickyNote: ["#fef08a", "#fed7aa", "#bbf7d0", "#bfdbfe", "#e9d5ff", "#fecdd3"],

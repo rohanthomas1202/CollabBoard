@@ -7,7 +7,7 @@ import { KonvaEventObject } from "konva/lib/Node";
 interface StickyNoteProps {
   obj: BoardObject;
   isSelected: boolean;
-  onSelect: () => void;
+  onSelect: (shiftKey?: boolean) => void;
   onDragEnd: (x: number, y: number) => void;
   onDragMove?: (x: number, y: number) => void;
   onTransformEnd?: (e: KonvaEventObject<Event>) => void;
@@ -37,8 +37,8 @@ export default function StickyNote({
       x={obj.x}
       y={obj.y}
       draggable={draggable}
-      onClick={onSelect}
-      onTap={onSelect}
+      onClick={(e) => onSelect((e.evt as MouseEvent).shiftKey)}
+      onTap={() => onSelect(false)}
       onDragEnd={handleDragEnd}
       onDragMove={handleDragMove}
       onTransformEnd={onTransformEnd}

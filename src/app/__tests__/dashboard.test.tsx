@@ -1,6 +1,16 @@
 import React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
+// Mock framer-motion to render plain divs in tests
+jest.mock("framer-motion", () => ({
+  motion: {
+    div: React.forwardRef(({ children, variants, initial, animate, whileHover, whileTap, layoutId, ...rest }: React.PropsWithChildren<Record<string, unknown>>, ref: React.Ref<HTMLDivElement>) =>
+      React.createElement("div", { ...rest, ref }, children)
+    ),
+  },
+  AnimatePresence: ({ children }: React.PropsWithChildren) => React.createElement(React.Fragment, null, children),
+}));
+
 const mockPush = jest.fn();
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
@@ -172,7 +182,7 @@ describe("DashboardPage", () => {
     });
 
     render(<DashboardPage />);
-    fireEvent.click(screen.getByText("Test Board").closest("[class*='rounded-2xl']")!);
+    fireEvent.click(screen.getByText("Test Board").closest("[class*='group']")!);
     expect(mockPush).toHaveBeenCalledWith("/board/board-1");
   });
 
